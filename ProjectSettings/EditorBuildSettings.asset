@@ -14,5 +14,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Blackjack.unity
     guid: 50068eb52c93405a9e834ade4035a0f8
+  - enabled: 1
+    path: Assets/Scenes/Baccarat.unity
+    guid: 329cb0d0e2aabe945aed461ef084ac84
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

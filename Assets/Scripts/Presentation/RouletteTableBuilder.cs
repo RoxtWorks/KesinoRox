@@ -37,7 +37,7 @@ public class RouletteTableBuilder : MonoBehaviour
     static readonly Color TableGreen = new Color(0.035f, 0.22f, 0.11f);
     static readonly Color WoodBrown = new Color(0.24f, 0.13f, 0.055f);
     static readonly Color WheelBlack = new Color(0.05f, 0.05f, 0.055f);
-    static readonly Color Gold = new Color(0.85f, 0.68f, 0.24f);
+    static readonly Color Silver = new Color(0.72f, 0.78f, 0.86f);
     static readonly Color PocketRed = new Color(0.62f, 0.04f, 0.04f);
     static readonly Color PocketBlack = new Color(0.04f, 0.04f, 0.045f);
     static readonly Color PocketGreen = new Color(0.04f, 0.42f, 0.13f);
@@ -71,7 +71,7 @@ public class RouletteTableBuilder : MonoBehaviour
         trim.transform.localPosition = new Vector3(0, -0.41f, 0);
         trim.transform.localScale = new Vector3(bowlRadius * 2.02f, 0.015f, bowlRadius * 2.02f);
         Object.Destroy(trim.GetComponent<Collider>());
-        Paint(trim, Gold, metallic: 0.85f, smoothness: 0.75f);
+        Paint(trim, Silver, metallic: 0.85f, smoothness: 0.75f);
 
         var wheelGO = new GameObject("Wheel");
         wheelGO.transform.SetParent(root.transform);
@@ -93,7 +93,7 @@ public class RouletteTableBuilder : MonoBehaviour
         hub.transform.localPosition = Vector3.up * DiscTopY;
         hub.transform.localScale = new Vector3(wheelRadius * 0.18f, 0.05f, wheelRadius * 0.18f);
         Object.Destroy(hub.GetComponent<Collider>());
-        Paint(hub, Gold, metallic: 0.85f, smoothness: 0.8f);
+        Paint(hub, Silver, metallic: 0.85f, smoothness: 0.8f);
 
         int pockets = WheelLayout.PocketCount;
         float pocketAngle = Mathf.PI * 2f / pockets;
@@ -113,7 +113,7 @@ public class RouletteTableBuilder : MonoBehaviour
             divider.transform.localScale = new Vector3(0.08f, 0.3f, wheelRadius * 0.28f);
             divider.transform.LookAt(wheelGO.transform.position + Vector3.up * 0.25f);
             Object.Destroy(divider.GetComponent<Collider>());
-            Paint(divider, Gold, metallic: 0.85f, smoothness: 0.75f);
+            Paint(divider, Silver, metallic: 0.85f, smoothness: 0.75f);
         }
 
         for (int i = 0; i < pockets; i++)
@@ -200,7 +200,7 @@ public class RouletteTableBuilder : MonoBehaviour
         markerGO.transform.localScale = new Vector3(0.16f, 0.3f, needleLength);
         markerGO.transform.LookAt(root.transform.position + markerDir * (needleLength + 1f) + Vector3.up * 0.45f);
         Object.Destroy(markerGO.GetComponent<Collider>());
-        Paint(markerGO, Gold, metallic: 0.85f, smoothness: 0.8f);
+        Paint(markerGO, Silver, metallic: 0.85f, smoothness: 0.8f);
         markerRenderer = markerGO.GetComponent<Renderer>();
 
         return root;

@@ -59,10 +59,10 @@ public class ChipSelectorUI : MonoBehaviour
         soundManager?.PlayClick();
     }
 
-    // Bright near-white gold vs a dark, clearly-dimmed grey — wider contrast than
-    // before so which chip is selected reads at a glance instead of blending in.
-    static readonly Color SelectedRing = new Color(1f, 0.92f, 0.55f);
-    static readonly Color UnselectedRing = new Color(0.28f, 0.28f, 0.3f);
+    // Bright near-white silver-blue vs a dark, clearly-dimmed grey — wide contrast
+    // so which chip is selected reads at a glance instead of blending in.
+    static readonly Color SelectedRing = new Color(0.85f, 0.92f, 1f);
+    static readonly Color UnselectedRing = new Color(0.26f, 0.28f, 0.32f);
 
     void HighlightSelected()
     {

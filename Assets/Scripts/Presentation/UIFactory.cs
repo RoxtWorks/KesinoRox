@@ -7,11 +7,12 @@ using UnityEngine.UI;
 // drop shadow instead of flat unstyled rectangles.
 public static class UIFactory
 {
-    // Shared dark/gold casino palette so every panel controller reads consistently.
-    public static readonly Color PanelDark = new Color(0.08f, 0.09f, 0.09f, 0.88f);
-    public static readonly Color PanelDarker = new Color(0.05f, 0.06f, 0.06f, 0.92f);
-    public static readonly Color Accent = new Color(0.83f, 0.68f, 0.21f);
-    public static readonly Color AccentDim = new Color(0.55f, 0.45f, 0.15f);
+    // Shared silver/blue palette (matches the Kenney frame art) so every panel
+    // controller reads consistently.
+    public static readonly Color PanelDark = new Color(0.07f, 0.08f, 0.1f, 0.88f);
+    public static readonly Color PanelDarker = new Color(0.05f, 0.055f, 0.07f, 0.92f);
+    public static readonly Color Accent = new Color(0.72f, 0.79f, 0.88f);
+    public static readonly Color AccentDim = new Color(0.4f, 0.46f, 0.56f);
     public static readonly Color TextLight = new Color(0.93f, 0.92f, 0.88f);
     public static readonly Color TextDim = new Color(0.68f, 0.66f, 0.6f);
     public static readonly Color Positive = new Color(0.35f, 0.78f, 0.4f);
@@ -51,12 +52,13 @@ public static class UIFactory
         frameGO.transform.SetParent(target.transform, false);
         var img = frameGO.AddComponent<Image>();
         img.sprite = square ? SquareFrameSprite() : CircleFrameSprite();
-        // Simple (stretch), not Sliced — this project's panels/buttons range from
-        // tiny badges to huge felt backdrops, and Sliced's 9-slice border math blew
-        // up into a solid fill on anything smaller than ~2x the source border. A
-        // plain stretch scales the ring thickness proportionally with the element
-        // instead, which reads fine across that whole size range.
-        img.type = Image.Type.Simple;
+        // Square frames are Kenney's actual 9-slice art (proper sprite border baked
+        // in via its import settings) so Sliced renders correctly across this
+        // project's whole size range. Circular ones are still the older procedural/
+        // Heat-derived sprite with no real border metadata, so those stay a plain
+        // stretch (Simple) — 9-slicing them was what caused the solid-fill bug
+        // earlier this session.
+        img.type = square ? Image.Type.Sliced : Image.Type.Simple;
         img.color = color;
         img.raycastTarget = false;
         var targetRt = target.GetComponent<RectTransform>();
@@ -78,19 +80,19 @@ public static class UIFactory
         {
             if (pixelFont == null && !pixelFontLoadAttempted)
             {
-                pixelFont = Resources.Load<TMP_FontAsset>("Fonts/ThaleahFat SDF");
+                pixelFont = Resources.Load<TMP_FontAsset>("Fonts/BoldPixels SDF");
                 pixelFontLoadAttempted = true;
             }
             return pixelFont;
         }
     }
 
-    static readonly VertexGradient GoldGradient = new VertexGradient(
-        new Color(1f, 0.87f, 0.45f), new Color(1f, 0.87f, 0.45f),
-        new Color(0.72f, 0.52f, 0.12f), new Color(0.72f, 0.52f, 0.12f));
+    static readonly VertexGradient TitleGradient = new VertexGradient(
+        new Color(0.88f, 0.94f, 1f), new Color(0.88f, 0.94f, 1f),
+        new Color(0.55f, 0.65f, 0.8f), new Color(0.55f, 0.65f, 0.8f));
 
-    // Big pixel-font screen title with the same gold vertex gradient as the main
-    // menu's "CASINO SIM" — used once per game screen for its hero header.
+    // Big pixel-font screen title with the same silver-blue vertex gradient as the
+    // main menu's "CASINO SIM" — used once per game screen for its hero header.
     public static TextMeshProUGUI MakeHeroTitle(Transform parent, string name, Vector2 anchoredPos, string text, float fontSize = 30)
     {
         var go = new GameObject(name);
@@ -100,7 +102,7 @@ public static class UIFactory
         t.fontSize = fontSize;
         t.alignment = TextAlignmentOptions.Center;
         t.enableVertexGradient = true;
-        t.colorGradient = GoldGradient;
+        t.colorGradient = TitleGradient;
         t.text = text;
         var rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(500, 60);
@@ -110,9 +112,20 @@ public static class UIFactory
 
     // Procedural 9-sliced rounded rect — corner alpha falls off with a couple of
     // pixels of antialiasing so it doesn't look jagged when scaled up.
+    // Kenney's ornate panel shape (Assets/Resources/UI/PanelFill.png) — pure white
+    // alpha-masked art, same as the procedural sprite this replaces, so every
+    // existing Image.color tint (bet-cell red/black, chip colors, per-game button
+    // colors) still applies cleanly with zero muddying. Falls back to the old
+    // procedural rounded rect if the file's ever missing.
     public static Sprite RoundedRect()
     {
         if (roundedSprite != null) return roundedSprite;
+        var kenneyPanel = Resources.Load<Sprite>("UI/PanelFill");
+        if (kenneyPanel != null)
+        {
+            roundedSprite = kenneyPanel;
+            return roundedSprite;
+        }
         const int size = 64, radius = 18;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
         var pixels = new Color[size * size];

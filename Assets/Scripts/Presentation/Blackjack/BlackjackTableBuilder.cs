@@ -9,7 +9,7 @@ public class BlackjackTableBuilder : MonoBehaviour
 
     static readonly Color TableGreen = new Color(0.035f, 0.22f, 0.11f);
     static readonly Color WoodBrown = new Color(0.24f, 0.13f, 0.055f);
-    static readonly Color Gold = new Color(0.85f, 0.68f, 0.24f);
+    static readonly Color Silver = new Color(0.72f, 0.78f, 0.86f);
     static readonly Color ShoeBlack = new Color(0.05f, 0.05f, 0.055f);
 
     public GameObject Build()
@@ -38,7 +38,7 @@ public class BlackjackTableBuilder : MonoBehaviour
         trim.transform.localPosition = new Vector3(0, -0.41f, 0);
         trim.transform.localScale = new Vector3(tableRadius * 2.02f, 0.015f, tableRadius * 2.02f);
         Object.Destroy(trim.GetComponent<Collider>());
-        Paint(trim, Gold, metallic: 0.85f, smoothness: 0.75f);
+        Paint(trim, Silver, metallic: 0.85f, smoothness: 0.75f);
 
         // Small decorative shoe box off to one side — purely cosmetic, the real
         // Shoe/card dealing is all Core logic + 2D CardUI, this just visually

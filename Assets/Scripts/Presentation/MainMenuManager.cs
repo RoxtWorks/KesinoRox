@@ -11,7 +11,7 @@ using UnityEngine.UI;
 public class MainMenuManager : MonoBehaviour
 {
     static readonly Color BgColor = new Color(0.04f, 0.03f, 0.06f);
-    static readonly Color Gold = new Color(0.92f, 0.75f, 0.28f);
+    static readonly Color ThemeAccent = new Color(0.75f, 0.82f, 0.9f);
     static readonly Color TextDim = new Color(0.72f, 0.7f, 0.66f);
 
     TMP_FontAsset pixelFont;
@@ -19,7 +19,7 @@ public class MainMenuManager : MonoBehaviour
     void Start()
     {
         Application.runInBackground = true;
-        pixelFont = Resources.Load<TMP_FontAsset>("Fonts/ThaleahFat SDF");
+        pixelFont = UIFactory.PixelFont;
         SetupCamera();
         SetupUI();
     }
@@ -60,12 +60,12 @@ public class MainMenuManager : MonoBehaviour
             }, 13, pixelFont: true);
 
         var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 230), 96,
-            new Vector2(1100, 160), Gold, FontStyles.Bold);
+            new Vector2(1100, 160), ThemeAccent, FontStyles.Bold);
         title.text = "CASINO SIM";
         title.enableVertexGradient = true;
         title.colorGradient = new VertexGradient(
-            new Color(1f, 0.87f, 0.45f), new Color(1f, 0.87f, 0.45f),
-            new Color(0.72f, 0.52f, 0.12f), new Color(0.72f, 0.52f, 0.12f));
+            new Color(0.9f, 0.95f, 1f), new Color(0.9f, 0.95f, 1f),
+            new Color(0.5f, 0.6f, 0.75f), new Color(0.5f, 0.6f, 0.75f));
 
         var titleRt = title.GetComponent<RectTransform>();
         titleRt.DOAnchorPosY(240, 1.6f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo)
@@ -124,7 +124,7 @@ public class MainMenuManager : MonoBehaviour
         shadow.effectColor = new Color(0, 0, 0, 0.5f);
         shadow.effectDistance = new Vector2(0, -3);
 
-        UIFactory.AddSharpFrame(go, Gold, square: true);
+        UIFactory.AddSharpFrame(go, ThemeAccent, square: true);
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;

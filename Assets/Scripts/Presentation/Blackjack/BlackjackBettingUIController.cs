@@ -749,7 +749,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         bool hasBet = pendingBet > 0;
         betSpotText.text = hasBet ? $"BET\n{pendingBet}" : "PLACE\nBET";
         betSpotText.color = hasBet ? UIFactory.Accent : UIFactory.TextDim;
-        betSpotFillImg.color = hasBet ? new Color(0.83f, 0.68f, 0.21f, 0.18f) : new Color(1f, 1f, 1f, 0.06f);
+        betSpotFillImg.color = hasBet ? new Color(0.72f, 0.79f, 0.88f, 0.18f) : new Color(1f, 1f, 1f, 0.06f);
         betText.text = hasBet ? "Click DEAL when you're ready" : "Pick a chip, then click the circle below";
     }
 

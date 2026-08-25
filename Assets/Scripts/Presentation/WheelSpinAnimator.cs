@@ -17,7 +17,7 @@ public class WheelSpinAnimator : MonoBehaviour
     // keeps the same "how fast is it actually turning" feel instead of just
     // stretching out the same manic speed over more time.
     const float Duration = 8f; // matches ConveyorBeltUI so both land together
-    static readonly Color MarkerIdle = new Color(0.85f, 0.68f, 0.24f); // gold, matches RouletteTableBuilder's Gold
+    static readonly Color MarkerIdle = new Color(0.72f, 0.78f, 0.86f); // silver, matches RouletteTableBuilder's Silver
 
     static float EaseOut(float u) => 1f - Mathf.Pow(1f - u, 5f);
 
