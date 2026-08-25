@@ -17,5 +17,8 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Baccarat.unity
     guid: 329cb0d0e2aabe945aed461ef084ac84
+  - enabled: 1
+    path: Assets/Scenes/Craps.unity
+    guid: 9d5d65c571854184998690c5db5f98eb
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0

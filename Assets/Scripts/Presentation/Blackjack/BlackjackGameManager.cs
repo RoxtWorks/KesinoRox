@@ -16,11 +16,13 @@ public class BlackjackGameManager : MonoBehaviour
     ChipSelectorUI chipSelector;
     BlackjackBettingUIController bettingController;
     BlackjackHistoryPanelUI historyPanel;
+    ResultsStripUI resultsStrip;
     SoundManager soundManager;
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
     GameSwitcherPanel switcherPanel;
+    RulesPopupUI rulesPanel;
     Transform cameraTransform;
     Light keyLight;
 
@@ -36,6 +38,7 @@ public class BlackjackGameManager : MonoBehaviour
         // stalls every Time.deltaTime-driven coroutine (card pop-ins, camera shake),
         // which would freeze mid-animation instead of completing.
         Application.runInBackground = true;
+        SoundManager.ApplyPersistedMuteState();
 
         builder = gameObject.AddComponent<BlackjackTableBuilder>();
         builder.Build();
@@ -113,11 +116,29 @@ public class BlackjackGameManager : MonoBehaviour
                 Application.Quit();
 #endif
             }, 13, pixelFont: true);
+        UIFactory.MakeMuteButton(canvasGO.transform, new Vector2(700, 515));
 
         switcherPanel = gameObject.AddComponent<GameSwitcherPanel>();
         switcherPanel.Build(canvasGO.transform, "Blackjack");
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
+
+        rulesPanel = gameObject.AddComponent<RulesPopupUI>();
+        rulesPanel.Build(canvasGO.transform, "BLACKJACK RULES",
+            "Beat the dealer's hand without going over 21.\n\n" +
+            "Blackjack (natural 21 on your first two cards) pays 3:2.\n" +
+            "A normal win pays 1:1. A push returns your bet.\n\n" +
+            "Dealer hits on soft 17 and stands on hard 17+.\n\n" +
+            "SPLIT — any pair, up to 4 hands total. Split aces get\n" +
+            "exactly one more card each and can't be re-split or hit.\n" +
+            "DOUBLE — double your bet for exactly one more card.\n" +
+            "Double-after-split is allowed.\n" +
+            "SURRENDER — forfeit half your bet before hitting.\n" +
+            "INSURANCE — offered only when the dealer shows an Ace;\n" +
+            "pays 2:1 if the dealer has blackjack.\n\n" +
+            "Shoe reshuffles automatically once it runs low.");
+        UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
+            "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();
@@ -126,7 +147,10 @@ public class BlackjackGameManager : MonoBehaviour
         juiceManager.Build(canvasGO.transform, cameraTransform, Vector3.up * 1f, keyLight);
 
         floatingText = gameObject.AddComponent<FloatingTextUI>();
-        floatingText.Build(canvasGO.transform, new Vector2(0, 460));
+        // Was pinned at 460, almost against the HUD panel above — floating win/loss
+        // text landed way up at the top edge instead of near the action. Centered
+        // over the table, just above its header, instead.
+        floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
         milestoneToast.Build(canvasGO.transform, new Vector2(0, 250));
@@ -153,6 +177,7 @@ public class BlackjackGameManager : MonoBehaviour
                 bankroll.Reset(resetAmount);
                 hud.Refresh();
                 historyPanel.Clear();
+                resultsStrip.Clear();
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
@@ -167,12 +192,17 @@ public class BlackjackGameManager : MonoBehaviour
         historyPanel = gameObject.AddComponent<BlackjackHistoryPanelUI>();
         historyPanel.Build(canvasGO.transform, HistoryPos, HistorySize);
 
+        resultsStrip = gameObject.AddComponent<ResultsStripUI>();
+        resultsStrip.Build(canvasGO.transform, new Vector2(0, -500));
+
         bettingController = gameObject.AddComponent<BlackjackBettingUIController>();
         bettingController.Build(canvasGO.transform, bankroll, chipSelector, shoe, soundManager, juiceManager,
             floatingText, milestoneToast, record =>
         {
             hud.Refresh();
             historyPanel.AddRecord(record);
+            resultsStrip.AddResult(record.NetChange > 0 ? "W" : record.NetChange < 0 ? "L" : "P",
+                record.NetChange > 0 ? UIFactory.Positive : record.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
 
             sessionRecords.Add(record);
             nextRoundIndex = record.RoundIndex + 1;
@@ -189,10 +219,17 @@ public class BlackjackGameManager : MonoBehaviour
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
             sessionRecords.AddRange(loadedRecords);
-            foreach (var record in loadedRecords) historyPanel.AddRecord(record);
+            foreach (var record in loadedRecords)
+            {
+                historyPanel.AddRecord(record);
+                resultsStrip.AddResult(record.NetChange > 0 ? "W" : record.NetChange < 0 ? "L" : "P",
+                    record.NetChange > 0 ? UIFactory.Positive : record.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
+            }
         }
 
         soundManager.PlayMusic();
+
+        SceneTransition.Reveal();
     }
 
     void OnApplicationQuit()

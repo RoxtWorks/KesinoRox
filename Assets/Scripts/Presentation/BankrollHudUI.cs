@@ -41,7 +41,10 @@ public class BankrollHudUI : MonoBehaviour
         inputImg.type = Image.Type.Sliced;
         inputImg.color = new Color(0.15f, 0.15f, 0.16f);
         budgetInput = inputGO.AddComponent<InputField>();
-        var textGO = UIFactory.MakeText(inputGO.transform, "Text", Vector2.zero, 16, TextAnchor.MiddleLeft, new Vector2(110, 30));
+        // Inset well clear of the sliced border art (same fix as button labels) —
+        // sizeDelta matching the box almost edge-to-edge left digits sitting on top
+        // of the frame instead of inside it.
+        var textGO = UIFactory.MakeText(inputGO.transform, "Text", Vector2.zero, 16, TextAnchor.MiddleLeft, new Vector2(96, 26));
         budgetInput.textComponent = textGO;
         budgetInput.text = "1000";
 
@@ -104,8 +107,14 @@ public class BankrollHudUI : MonoBehaviour
     {
         long shown = (long)System.Math.Round(displayedBalance);
         long net = shown - bankroll.TotalFunded;
-        hudText.color = net > 0 ? UIFactory.Positive : net < 0 ? UIFactory.Negative : UIFactory.TextLight;
-        hudText.text = $"Balance: {shown}     Starting: {bankroll.StartingBalance}     Net: {net:+#;-#;0}";
+        string netColorHex = net > 0 ? "5FC766" : net < 0 ? "D9524C" : "ECEBE1";
+        // Balance is the number a player actually needs at a glance — sized up and
+        // bolded via rich text so it reads as the primary figure, with Starting/Net
+        // as smaller supporting context rather than three equally-weighted numbers.
+        hudText.color = UIFactory.TextLight;
+        hudText.text = $"<size=30><b>Balance: {UIFactory.FormatMoney(shown)}</b></size>" +
+            $"     <size=20><color=#B3B2A6>Starting: {UIFactory.FormatMoney(bankroll.StartingBalance)}</color>" +
+            $"     <color=#{netColorHex}>Net: {(net >= 0 ? "+" : "")}{UIFactory.FormatMoney(net)}</color></size>";
 
         bool busted = bankroll.Balance < ChipDenominations.Values[0];
         bustHintText.text = busted ? "Out of chips — ADD FUNDS or hit RESET to keep playing" : "";

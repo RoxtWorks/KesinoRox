@@ -133,9 +133,9 @@ public class BaccaratHistoryPanelUI : MonoBehaviour
             MakeRowText(rowGO.transform, $"{rec.RoundIndex + 1}", 0);
             MakeRowText(rowGO.transform, $"{rec.PlayerPoint}", 1, playerColor, tie ? FontStyle.Bold : FontStyle.Normal);
             MakeRowText(rowGO.transform, $"{rec.BankerPoint}", 2, bankerColor, tie ? FontStyle.Bold : FontStyle.Normal);
-            MakeRowText(rowGO.transform, $"{rec.TotalStaked}", 3);
-            MakeRowText(rowGO.transform, $"{sign}{rec.NetChange}", 4, netColor);
-            MakeRowText(rowGO.transform, $"{rec.BalanceAfter}", 5);
+            MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.TotalStaked), 3);
+            MakeRowText(rowGO.transform, $"{sign}{UIFactory.FormatMoney(rec.NetChange)}", 4, netColor);
+            MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.BalanceAfter), 5);
 
             rowObjects.Add(rowGO);
             if (animateNewest && i == records.Count - 1) JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);

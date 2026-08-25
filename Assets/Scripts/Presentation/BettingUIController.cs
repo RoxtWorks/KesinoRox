@@ -62,6 +62,9 @@ public class BettingUIController : MonoBehaviour
     Coroutine achievementHideRoutine;
     Button spinButton;
     Button repeatButton;
+    Button undoButton;
+    Button clearBetsButton;
+    Button doubleAllButton;
 
     Transform canvasTransform;
     // Everything that makes up the betting felt lives under this one root so it can
@@ -144,10 +147,18 @@ public class BettingUIController : MonoBehaviour
 
         // Backdrop behind the whole betting felt so it reads as one panel against
         // the 3D table instead of buttons floating loose over the wheel graphic.
-        UIFactory.MakePanel(tableRoot, "BettingPanelBg", new Vector2(PanelCenterX, -120), new Vector2(TotalWidth + 60, 650), UIFactory.PanelDark);
+        // Grown taller on the top side only (center raised, bottom edge unchanged —
+        // the number grid/outside bets/action row below all key off GridTop and
+        // don't move) so the header at y=195 has real headroom below the panel's
+        // own top edge instead of poking above it into the 3D wheel. Header/status
+        // stay at their original 195/155 — that spacing was already correct against
+        // the grid below (GridTop=76, top row edge ~111); the actual bug was the
+        // panel being too short, not the header/status positions themselves.
+        UIFactory.MakePanel(tableRoot, "BettingPanelBg", new Vector2(PanelCenterX, -90), new Vector2(TotalWidth + 60, 710), UIFactory.PanelDark);
         UIFactory.MakeHeroTitle(tableRoot, "Header_BettingTable", new Vector2(PanelCenterX, 195), "BETTING TABLE", 26);
 
-        UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
         statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 155), 20,
             sizeDelta: new Vector2(500, 34), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place bets, then SPIN";
@@ -232,10 +243,10 @@ public class BettingUIController : MonoBehaviour
         // Bottom row: UNDO / CLEAR / SPIN / REPEAT / DOUBLE ALL. UNDO and DOUBLE ALL
         // sit outside the original CLEAR/SPIN/REPEAT trio with room to spare — the
         // felt panel is wide enough that this doesn't crowd anything.
-        UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(PanelCenterX - 390, bottomY), new Vector2(120, 46),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(PanelCenterX - 390, bottomY), new Vector2(120, 46),
             "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
 
-        UIFactory.MakeButton(tableRoot, "ClearBetsBtn", new Vector2(PanelCenterX - 210, bottomY), new Vector2(150, 46),
+        clearBetsButton = UIFactory.MakeButton(tableRoot, "ClearBetsBtn", new Vector2(PanelCenterX - 210, bottomY), new Vector2(150, 46),
             "CLEAR BETS", UIFactory.RedBet, ClearBets, 14, pixelFont: true);
 
         spinButton = UIFactory.MakeButton(tableRoot, "SpinButton", new Vector2(PanelCenterX, bottomY), new Vector2(200, 54),
@@ -244,7 +255,7 @@ public class BettingUIController : MonoBehaviour
         repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(PanelCenterX + 210, bottomY), new Vector2(150, 46),
             "REPEAT BET", UIFactory.AccentDim, RepeatLastBet, 14, pixelFont: true);
 
-        UIFactory.MakeButton(tableRoot, "DoubleAllBtn", new Vector2(PanelCenterX + 390, bottomY), new Vector2(140, 46),
+        doubleAllButton = UIFactory.MakeButton(tableRoot, "DoubleAllBtn", new Vector2(PanelCenterX + 390, bottomY), new Vector2(140, 46),
             "DOUBLE ALL", UIFactory.AccentDim, DoubleAllBets, 13, pixelFont: true);
 
         RefreshBetTray();
@@ -351,7 +362,7 @@ public class BettingUIController : MonoBehaviour
                 float x = (ColX(col) + ColX(col + 1)) / 2f;
                 float y = (RowY(row) + RowY(row + 1)) / 2f;
                 UIFactory.MakeButton(canvas, $"Corner_{numbers[0]}", new Vector2(x, y), new Vector2(24, 24),
-                    "C", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Corner, numbers), 11);
+                    "C", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Corner, numbers), 11, flatFill: true);
                 RegisterSpot(BetType.Corner, numbers, new Vector2(x, y), chipSize: 20f);
             }
         }
@@ -373,7 +384,7 @@ public class BettingUIController : MonoBehaviour
                 var numbers = new[] { NumberAt(col, row), NumberAt(col, row + 1) };
                 var pos = new Vector2(ColX(col), (RowY(row) + RowY(row + 1)) / 2f);
                 UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(CellW - 14, 14),
-                    "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9);
+                    "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9, flatFill: true);
                 RegisterSpot(BetType.Split, numbers, pos, chipSize: 18f);
             }
         }
@@ -385,7 +396,7 @@ public class BettingUIController : MonoBehaviour
                 var numbers = new[] { NumberAt(col, row), NumberAt(col + 1, row) };
                 var pos = new Vector2((ColX(col) + ColX(col + 1)) / 2f, RowY(row));
                 UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(14, CellH - 14),
-                    "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9);
+                    "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9, flatFill: true);
                 RegisterSpot(BetType.Split, numbers, pos, chipSize: 18f);
             }
         }
@@ -403,7 +414,7 @@ public class BettingUIController : MonoBehaviour
             var numbers = new[] { NumberAt(col, 0), NumberAt(col, 1), NumberAt(col, 2) };
             var pos = new Vector2(ColX(col), streetY);
             UIFactory.MakeButton(canvas, $"Street_{numbers[0]}", pos, new Vector2(CellW - 10, 28),
-                "S", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Street, numbers), 13);
+                "S", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Street, numbers), 14, flatFill: true);
             RegisterSpot(BetType.Street, numbers, pos, chipSize: 24f);
         }
 
@@ -420,7 +431,7 @@ public class BettingUIController : MonoBehaviour
             float x = (ColX(col) + ColX(col + 1)) / 2f;
             var pos = new Vector2(x, sixLineY);
             UIFactory.MakeButton(canvas, $"SixLine_{numbers[0]}", pos, new Vector2(26, 26),
-                "6L", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.SixLine, numbers), 10);
+                "6L", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.SixLine, numbers), 11, flatFill: true);
             RegisterSpot(BetType.SixLine, numbers, pos, chipSize: 20f);
         }
     }
@@ -490,6 +501,11 @@ public class BettingUIController : MonoBehaviour
     void PlaceStraight(int number) => PlaceMulti(BetType.Straight, new[] { number });
     void PlaceOutside(BetType type) => PlaceMulti(type, null);
 
+    // A blocked action (insufficient balance, nothing to undo, etc.) used to only
+    // change the status text — easy to miss mid-click. A quick shake+flash makes it
+    // felt, not just read, same tier as the small negative reaction to a loss.
+    void FlashBlocked() => juiceManager?.MicroShake(1.2f);
+
     void PlaceMulti(BetType type, int[] numbers)
     {
         if (belt.IsPlaying) return;
@@ -500,6 +516,7 @@ public class BettingUIController : MonoBehaviour
             statusText.text = bankroll.Balance < ChipDenominations.Values[0]
                 ? "Out of chips — use ADD FUNDS above to keep playing"
                 : "Not enough balance for that bet";
+            FlashBlocked();
             return;
         }
 
@@ -534,12 +551,14 @@ public class BettingUIController : MonoBehaviour
         if (lastBets.Count == 0)
         {
             statusText.text = "No previous bet to repeat";
+            FlashBlocked();
             return;
         }
         long total = lastBets.Sum(b => b.Amount);
         if (!bankroll.CanAfford(total))
         {
             statusText.text = "Not enough balance to repeat that bet";
+            FlashBlocked();
             return;
         }
 
@@ -566,12 +585,14 @@ public class BettingUIController : MonoBehaviour
         if (pendingBets.Count == 0)
         {
             statusText.text = "No bets to double";
+            FlashBlocked();
             return;
         }
         long currentTotal = pendingBets.Values.Sum(b => b.Amount);
         if (!bankroll.CanAfford(currentTotal * 2))
         {
             statusText.text = "Not enough balance to double";
+            FlashBlocked();
             return;
         }
 
@@ -602,6 +623,7 @@ public class BettingUIController : MonoBehaviour
         if (undoStack.Count == 0)
         {
             statusText.text = "Nothing to undo";
+            FlashBlocked();
             return;
         }
         var snapshot = undoStack[undoStack.Count - 1];
@@ -697,11 +719,21 @@ public class BettingUIController : MonoBehaviour
 
     void RefreshBetTray()
     {
+        // UNDO/CLEAR/REPEAT/DOUBLE ALL only make sense in specific states — dim
+        // them the rest of the time instead of leaving them clickable-but-no-op.
+        // SPIN is deliberately excluded: spinning with no bet placed is valid.
+        UIFactory.SetButtonState(undoButton, UIFactory.AccentDim, undoStack.Count > 0);
+        UIFactory.SetButtonState(clearBetsButton, UIFactory.RedBet, pendingBets.Count > 0);
+        UIFactory.SetButtonState(repeatButton, UIFactory.AccentDim, lastBets.Count > 0);
+        UIFactory.SetButtonState(doubleAllButton, UIFactory.AccentDim, pendingBets.Count > 0);
+
         if (pendingBets.Count == 0)
         {
-            betTrayText.text = "No bets placed";
+            betTrayText.color = UIFactory.TextDim;
+            betTrayText.text = "Place a chip on the felt to see your bets here";
             return;
         }
+        betTrayText.color = UIFactory.TextLight;
         var lines = pendingBets.Values.Select(b =>
         {
             string label = b.Type switch
@@ -713,10 +745,10 @@ public class BettingUIController : MonoBehaviour
                 BetType.SixLine => $"6-Line {string.Join("/", b.Numbers)}",
                 _ => b.Type.ToString()
             };
-            return $"{label}: {b.Amount}";
+            return $"{label}: {UIFactory.FormatMoney(b.Amount)}";
         });
         long total = pendingBets.Values.Sum(b => b.Amount);
-        betTrayText.text = string.Join("\n", lines) + $"\n\nTotal: {total}";
+        betTrayText.text = string.Join("\n", lines) + $"\n\nTotal: {UIFactory.FormatMoney(total)}";
     }
 
     void TrySpin()
@@ -727,6 +759,7 @@ public class BettingUIController : MonoBehaviour
         if (totalStake > 0 && !bankroll.TryWithdraw(totalStake))
         {
             statusText.text = "Not enough balance to spin";
+            FlashBlocked();
             return;
         }
 
@@ -799,21 +832,21 @@ public class BettingUIController : MonoBehaviour
                     juiceManager?.PlayConfetti(2f);
                     juiceManager?.PulseLight(0.9f, 0.7f);
                     juiceManager?.PlayMoneyFountain(Vector2.zero);
-                    floatingText?.Show($"HUGE WIN +{net}!", UIFactory.Positive, fontSize: 42);
+                    floatingText?.Show($"HUGE WIN +{UIFactory.FormatMoney(net)}!", UIFactory.Positive, fontSize: 42);
                 }
                 else if (payoutRatio >= 4)
                 {
                     juiceManager?.Shake(0.42f, 3f);
                     juiceManager?.Flash(new Color(0.28f, 0.95f, 0.38f, 0.22f), 0.55f);
                     juiceManager?.PlayConfetti(1.4f);
-                    floatingText?.Show($"Big Win +{net}!", UIFactory.Positive, fontSize: 34);
+                    floatingText?.Show($"Big Win +{UIFactory.FormatMoney(net)}!", UIFactory.Positive, fontSize: 34);
                 }
                 else
                 {
                     juiceManager?.Shake(0.35f, 2.5f);
                     juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.18f), 0.5f);
                     juiceManager?.PlayConfetti();
-                    floatingText?.Show($"+{net}", UIFactory.Positive);
+                    floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
                 }
                 winStreak++;
             }
@@ -822,7 +855,7 @@ public class BettingUIController : MonoBehaviour
                 soundManager?.PlayLose();
                 juiceManager?.Shake(0.2f, 1f);
                 juiceManager?.Flash(new Color(0.85f, 0.2f, 0.2f, 0.14f), 0.4f);
-                floatingText?.Show($"{net}", UIFactory.Negative);
+                floatingText?.Show($"{UIFactory.FormatMoney(net)}", UIFactory.Negative);
                 winStreak = 0;
             }
             else

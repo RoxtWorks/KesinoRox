@@ -2,11 +2,10 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Horizontal strip of small colored number badges for every spin this session —
-// the compact "recent results" readout real roulette tables show, distinct from
-// HistoryPanelUI's detailed bankroll log. Newest spin sits leftmost and the strip
-// auto-snaps back there on every new spin; older spins scroll off to the right.
-public class PastSpinsStripUI : MonoBehaviour
+// Blackjack/Baccarat's equivalent of PastSpinsStripUI — same horizontal scrolling
+// badge-strip mechanics, but badges carry a short text label (W/L/P, or P/B/T)
+// instead of a roulette number, since there's no single numeric result to show.
+public class ResultsStripUI : MonoBehaviour
 {
     Transform content;
     ScrollRect scrollRect;
@@ -15,13 +14,14 @@ public class PastSpinsStripUI : MonoBehaviour
     const float Diameter = 34f;
     const float Spacing = 40f;
 
-    readonly List<int> numbers = new List<int>();
+    struct Entry { public string Label; public Color Color; }
+    readonly List<Entry> entries = new List<Entry>();
     readonly List<GameObject> badgeObjects = new List<GameObject>();
     CanvasGroup group;
 
-    public void Build(Transform canvas, Vector2 anchoredPos)
+    public void Build(Transform canvas, Vector2 anchoredPos, string header = "Recent Results")
     {
-        var rootGO = new GameObject("PastSpinsRoot");
+        var rootGO = new GameObject("ResultsStripRoot");
         rootGO.transform.SetParent(canvas, false);
         var rt = rootGO.AddComponent<RectTransform>();
         rt.anchorMin = new Vector2(0.5f, 0.5f);
@@ -32,10 +32,10 @@ public class PastSpinsStripUI : MonoBehaviour
         var root = rootGO.transform;
 
         float viewportWidth = Spacing * VisibleCount;
-        UIFactory.MakePanel(root, "PastSpinsBg", anchoredPos, new Vector2(viewportWidth + 20, Diameter + 20), UIFactory.PanelDark);
-        UIFactory.MakeSectionHeader(root, "Recent Spins", anchoredPos + new Vector2(-viewportWidth / 2f + 10, Diameter / 2f + 22), new Vector2(200, 20));
+        UIFactory.MakePanel(root, "ResultsStripBg", anchoredPos, new Vector2(viewportWidth + 20, Diameter + 20), UIFactory.PanelDark);
+        UIFactory.MakeSectionHeader(root, header, anchoredPos + new Vector2(-viewportWidth / 2f + 10, Diameter / 2f + 22), new Vector2(200, 20));
 
-        var scrollGO = new GameObject("PastSpinsScroll");
+        var scrollGO = new GameObject("ResultsStripScroll");
         scrollGO.transform.SetParent(root, false);
         var scrollRt = scrollGO.AddComponent<RectTransform>();
         scrollRt.sizeDelta = new Vector2(viewportWidth, Diameter + 6);
@@ -77,29 +77,16 @@ public class PastSpinsStripUI : MonoBehaviour
         group.blocksRaycasts = visible;
     }
 
-    public void AddSpin(int number)
+    public void AddResult(string label, Color color)
     {
-        numbers.Insert(0, number);
-        if (numbers.Count > MaxStored) numbers.RemoveRange(MaxStored, numbers.Count - MaxStored);
+        entries.Insert(0, new Entry { Label = label, Color = color });
+        if (entries.Count > MaxStored) entries.RemoveRange(MaxStored, entries.Count - MaxStored);
         Rebuild(animateNewest: true);
     }
 
     public void Clear()
     {
-        numbers.Clear();
-        Rebuild(false);
-    }
-
-    // Bulk-load path for session restore — see HistoryPanelUI.LoadRecords for why
-    // this exists instead of calling AddSpin in a loop. Takes the saved records in
-    // their normal oldest-to-newest order and reverses them once, matching what
-    // repeated AddSpin's Insert(0, ...) calls would have produced (newest at index 0).
-    public void LoadSpins(IEnumerable<int> loadedOldestFirst)
-    {
-        numbers.Clear();
-        numbers.AddRange(loadedOldestFirst);
-        numbers.Reverse();
-        if (numbers.Count > MaxStored) numbers.RemoveRange(MaxStored, numbers.Count - MaxStored);
+        entries.Clear();
         Rebuild(false);
     }
 
@@ -109,30 +96,20 @@ public class PastSpinsStripUI : MonoBehaviour
         badgeObjects.Clear();
 
         var contentRt = (RectTransform)content;
-        float width = Mathf.Max(Spacing * VisibleCount, Spacing * numbers.Count + 10);
+        float width = Mathf.Max(Spacing * VisibleCount, Spacing * entries.Count + 10);
         contentRt.sizeDelta = new Vector2(width, Diameter + 6);
 
-        for (int i = 0; i < numbers.Count; i++)
+        for (int i = 0; i < entries.Count; i++)
         {
-            int n = numbers[i];
-            Color fillColor = n == 0 ? UIFactory.FeltGreen : (WheelLayout.IsRed(n) ? UIFactory.RedBet : UIFactory.BlackBet);
+            var e = entries[i];
             var pos = new Vector2(Diameter / 2f + 6 + i * Spacing, 0);
 
-            // Ring is the OUTER graphic (bigger, drawn first) so the smaller colored
-            // fill sits on top of it and stays visible — previously the ring was a
-            // child sized bigger than its parent's fill circle, which meant it
-            // rendered on top and completely hid the red/black/green color underneath,
-            // leaving every badge showing as flat gold/gray no matter the number.
-            var ringGO = new GameObject($"SpinBadge_{i}");
+            var ringGO = new GameObject($"ResultBadge_{i}");
             ringGO.transform.SetParent(content, false);
             var ringImg = ringGO.AddComponent<Image>();
             ringImg.sprite = UIFactory.Circle();
             ringImg.color = i == 0 ? UIFactory.Accent : new Color(0.35f, 0.35f, 0.35f);
             var ringRt = ringGO.GetComponent<RectTransform>();
-            // Content anchors its children from its own left-center edge (anchorMin/Max
-            // (0,0.5)), not the default (0,0) — without matching that here, anchoredPosition
-            // measures from the wrong reference point and every badge lands far outside
-            // the viewport, clipped invisible by the scroll mask.
             ringRt.anchorMin = new Vector2(0f, 0.5f);
             ringRt.anchorMax = new Vector2(0f, 0.5f);
             ringRt.pivot = new Vector2(0.5f, 0.5f);
@@ -143,13 +120,13 @@ public class PastSpinsStripUI : MonoBehaviour
             fillGO.transform.SetParent(ringGO.transform, false);
             var fillImg = fillGO.AddComponent<Image>();
             fillImg.sprite = UIFactory.Circle();
-            fillImg.color = fillColor;
+            fillImg.color = e.Color;
             var fillRt = fillGO.GetComponent<RectTransform>();
             fillRt.sizeDelta = new Vector2(Diameter, Diameter);
 
-            var text = UIFactory.MakeText(fillGO.transform, "Num", Vector2.zero, 14, sizeDelta: new Vector2(Diameter, Diameter),
+            var text = UIFactory.MakeText(fillGO.transform, "Label", Vector2.zero, 14, sizeDelta: new Vector2(Diameter, Diameter),
                 color: Color.white, style: FontStyle.Bold);
-            text.text = n.ToString();
+            text.text = e.Label;
 
             badgeObjects.Add(ringGO);
             if (animateNewest && i == 0) JuiceTweens.PopIn(this, ringRt, overshoot: 1.3f, duration: 0.22f);

@@ -26,5 +26,6 @@ public static class GameCatalog
         new Entry("Main", "ROULETTE", new Color(0.16f, 0.55f, 0.32f)),
         new Entry("Blackjack", "BLACKJACK", new Color(0.62f, 0.16f, 0.18f)),
         new Entry("Baccarat", "BACCARAT", new Color(0.16f, 0.32f, 0.58f)),
+        new Entry("Craps", "CRAPS", new Color(0.62f, 0.46f, 0.1f)),
     };
 }

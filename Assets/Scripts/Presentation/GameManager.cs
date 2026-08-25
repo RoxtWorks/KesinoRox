@@ -25,6 +25,7 @@ public class GameManager : MonoBehaviour
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
     GameSwitcherPanel switcherPanel;
+    RulesPopupUI rulesPanel;
     Transform cameraTransform;
     Light keyLight;
 
@@ -55,6 +56,7 @@ public class GameManager : MonoBehaviour
         // landing on the wrong pocket even though the bet already resolved correctly
         // against the real result.
         Application.runInBackground = true;
+        SoundManager.ApplyPersistedMuteState();
 
         builder = gameObject.AddComponent<RouletteTableBuilder>();
         builder.Build();
@@ -66,6 +68,8 @@ public class GameManager : MonoBehaviour
         generator = new SpinResultGenerator();
 
         SetupUI();
+
+        SceneTransition.Reveal();
     }
 
     void SetupCamera()
@@ -142,6 +146,7 @@ public class GameManager : MonoBehaviour
                 Application.Quit();
 #endif
             }, 13, pixelFont: true);
+        UIFactory.MakeMuteButton(canvasGO.transform, new Vector2(700, 515));
 
         // MENU opens an in-scene popup listing the other games instead of navigating
         // back to the (now pointless, once you've picked a game) main menu scene.
@@ -149,6 +154,23 @@ public class GameManager : MonoBehaviour
         switcherPanel.Build(canvasGO.transform, "Main");
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
+
+        rulesPanel = gameObject.AddComponent<RulesPopupUI>();
+        rulesPanel.Build(canvasGO.transform, "ROULETTE RULES",
+            "Bet on the felt, then hit SPIN.\n\n" +
+            "STRAIGHT UP (single number) — pays 35:1\n" +
+            "SPLIT (2 adjacent numbers) — pays 17:1\n" +
+            "STREET (3 numbers, one row) — pays 11:1\n" +
+            "CORNER (4 numbers) — pays 8:1\n" +
+            "LINE (6 numbers, two rows) — pays 5:1\n" +
+            "DOZEN / COLUMN (12 numbers) — pays 2:1\n" +
+            "RED/BLACK, ODD/EVEN, 1-18/19-36 — pays 1:1\n\n" +
+            "0 is green and loses every outside bet.\n\n" +
+            "UNDO reverses your last bet action. REPEAT BET places\n" +
+            "your previous bet again. DOUBLE ALL doubles every\n" +
+            "pending bet at once.");
+        UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
+            "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();
@@ -162,7 +184,10 @@ public class GameManager : MonoBehaviour
         // rise before hitting the top of the screen, so the animation barely read as
         // movement. Starting lower means it rises up through/past the HUD, which
         // looks like money flying up out of the balance instead of a static blip.
-        floatingText.Build(canvasGO.transform, new Vector2(0, 460));
+        // Was pinned at 460, almost against the HUD panel above — floating win/loss
+        // text landed way up at the top edge instead of near the action. Centered
+        // over the table, just above its header, instead.
+        floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
         milestoneToast.Build(canvasGO.transform, new Vector2(0, 250));
@@ -252,10 +277,15 @@ public class GameManager : MonoBehaviour
             SaveSystem.Save(bankroll, nextSpinIndex, sessionRecords);
         });
 
-        // Restore last session, if a save exists — bankroll first, then replay every
-        // saved spin through the exact same AddRecord/AddSpin calls a live spin uses,
-        // so History/P-L/Hot-Cold/Recent-Spins come back looking exactly as they were
-        // instead of just the balance number being right.
+        // Restore last session, if a save exists — bankroll first, then feed every
+        // saved spin into the four trackers' bulk-load paths (LoadRecords/LoadSpins)
+        // so History/P-L/Hot-Cold/Recent-Spins come back looking exactly as they
+        // were. Used to call each tracker's AddRecord/AddSpin once per saved spin —
+        // exactly matching a live spin's own path, but each of those calls does a
+        // full destroy-and-rebuild of its display, so replaying a whole session
+        // that way rebuilt everything once per saved spin (O(n^2)) instead of once
+        // total, and was the main reason switching into Roulette got slower the
+        // longer a save file's history grew.
         if (SaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextSpinIndex, out List<SpinRecord> loadedRecords))
         {
@@ -264,13 +294,11 @@ public class GameManager : MonoBehaviour
             bettingController.SetSpinIndex(loadedNextSpinIndex);
             nextSpinIndex = loadedNextSpinIndex;
             sessionRecords.AddRange(loadedRecords);
-            foreach (var record in loadedRecords)
-            {
-                historyPanel.AddRecord(record);
-                pastSpinsStrip.AddSpin(record.WinningNumber);
-                plTracker.AddRecord(record);
-                hotColdTracker.AddSpin(record.WinningNumber);
-            }
+            var winningNumbers = loadedRecords.Select(r => r.WinningNumber);
+            historyPanel.LoadRecords(loadedRecords);
+            pastSpinsStrip.LoadSpins(winningNumbers);
+            plTracker.LoadRecords(loadedRecords);
+            hotColdTracker.LoadSpins(winningNumbers);
         }
 
         soundManager.PlayMusic();

@@ -33,6 +33,7 @@ public class BaccaratHandUI
         root.anchoredPosition = anchoredPos;
 
         totalBadgeBg = UIFactory.MakePanel(root, "TotalBadgeBg", new Vector2(0, -70), new Vector2(90, 28), UIFactory.PanelDarker, shadow: false);
+        UIFactory.AddSharpFrame(totalBadgeBg, UIFactory.AccentDim, square: true);
         totalBadgeImg = totalBadgeBg.GetComponent<Image>();
         totalText = UIFactory.MakeText(root, "TotalText", new Vector2(0, -70), 15,
             sizeDelta: new Vector2(80, 24), color: UIFactory.TextLight, style: FontStyle.Bold);

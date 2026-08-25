@@ -69,6 +69,26 @@ public class HotColdTrackerUI : MonoBehaviour
         Refresh();
     }
 
+    // Bulk-load path for session restore — unlike the other three trackers this one
+    // doesn't destroy/recreate GameObjects per AddSpin (Refresh only updates a fixed
+    // set of Text components), so it was never the O(n^2) part of the slow-load
+    // problem. Still wasteful to Refresh() once per saved spin when only the final
+    // state matters, so this replays into the counts/window directly and refreshes
+    // once at the end, same pattern as the other trackers' LoadRecords/LoadSpins.
+    public void LoadSpins(IEnumerable<int> loadedOldestFirst)
+    {
+        window.Clear();
+        System.Array.Clear(counts, 0, counts.Length);
+        foreach (int number in loadedOldestFirst)
+        {
+            window.Enqueue(number);
+            counts[number]++;
+            if (window.Count > WindowSize)
+                counts[window.Dequeue()]--;
+        }
+        Refresh();
+    }
+
     static Color NumberColor(int n) => n == 0 ? UIFactory.FeltGreen : (WheelLayout.IsRed(n) ? UIFactory.RedBet : UIFactory.TextLight);
 
     void Refresh()

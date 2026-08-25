@@ -19,9 +19,12 @@ public class MainMenuManager : MonoBehaviour
     void Start()
     {
         Application.runInBackground = true;
+        SoundManager.ApplyPersistedMuteState();
         pixelFont = UIFactory.PixelFont;
         SetupCamera();
         SetupUI();
+
+        SceneTransition.Reveal();
     }
 
     void SetupCamera()
@@ -58,6 +61,7 @@ public class MainMenuManager : MonoBehaviour
                 Application.Quit();
 #endif
             }, 13, pixelFont: true);
+        UIFactory.MakeMuteButton(canvasGO.transform, new Vector2(880, 470));
 
         var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 230), 96,
             new Vector2(1100, 160), ThemeAccent, FontStyles.Bold);

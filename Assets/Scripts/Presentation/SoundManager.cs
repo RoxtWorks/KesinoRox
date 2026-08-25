@@ -52,6 +52,28 @@ public class SoundManager : MonoBehaviour
         if (musicSource.clip != null && !musicSource.isPlaying) musicSource.Play();
     }
 
+    // Global mute — AudioListener.volume is a single engine-wide knob, so toggling
+    // it here mutes music and every SFX source at once regardless of which scene's
+    // SoundManager instance made the call. Persisted so muting carries across scene
+    // loads and the next session, instead of resetting on every game switch.
+    const string MutePrefKey = "RouletteSim_Muted";
+
+    public static bool IsMuted => AudioListener.volume <= 0f;
+
+    public static void ApplyPersistedMuteState()
+    {
+        AudioListener.volume = PlayerPrefs.GetInt(MutePrefKey, 0) == 1 ? 0f : 1f;
+    }
+
+    public static bool ToggleMute()
+    {
+        bool nowMuted = !IsMuted;
+        AudioListener.volume = nowMuted ? 0f : 1f;
+        PlayerPrefs.SetInt(MutePrefKey, nowMuted ? 1 : 0);
+        PlayerPrefs.Save();
+        return nowMuted;
+    }
+
     public void PlayChip() => Play(chip);
     public void PlayClick() => Play(click);
     public void PlayWin() => Play(win);

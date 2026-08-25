@@ -21,6 +21,36 @@ public static class UIFactory
     public static readonly Color FeltGreenDark = new Color(0.06f, 0.22f, 0.12f);
     public static readonly Color RedBet = new Color(0.68f, 0.14f, 0.14f);
     public static readonly Color BlackBet = new Color(0.1f, 0.1f, 0.12f);
+    // Lightened from (0.22,0.22,0.24) — that shade sat too close to the near-black
+    // felt/panel backgrounds to read as "disabled" rather than "invisible."
+    public static readonly Color DisabledButton = new Color(0.3f, 0.3f, 0.34f, 0.85f);
+
+    // Swaps a button's own Image color directly between its base color and a flat
+    // grey — Unity's built-in ColorBlock.disabledColor tint is too subtle to read
+    // as "disabled" against this project's palette. One shared helper instead of
+    // every controller keeping its own copy (blackjack and baccarat each had one).
+    public static void SetButtonState(Button btn, Color baseColor, bool enabled)
+    {
+        btn.interactable = enabled;
+        var img = btn.GetComponent<Image>();
+        if (img != null) img.color = enabled ? baseColor : DisabledButton;
+    }
+
+    // Thousands separators on every balance/bet/history number in the project —
+    // "11000" reads slower than "11,000" once a session's run a while.
+    public static string FormatMoney(long amount) => amount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+
+    // Compact form for tight spaces (P/L grid cells, ~30px) where "+1,250" would
+    // overflow or get shrunk unreadably small — "1.3k" instead. Full FormatMoney is
+    // still used everywhere there's room (HUD, history tables) since it's more precise.
+    public static string FormatMoneyCompact(long amount)
+    {
+        long abs = System.Math.Abs(amount);
+        string sign = amount < 0 ? "-" : "";
+        if (abs < 1000) return $"{sign}{abs}";
+        if (abs < 1000000) return $"{sign}{abs / 1000f:0.#}k";
+        return $"{sign}{abs / 1000000f:0.#}m";
+    }
 
     static Sprite roundedSprite;
     static Font cachedFont;
@@ -180,14 +210,39 @@ public static class UIFactory
         return t;
     }
 
+    // One shared mute toggle every scene's top bar can drop in — SoundManager holds
+    // the actual state (AudioListener.volume, persisted via PlayerPrefs), this just
+    // builds the button and keeps its own label in sync with it.
+    public static Button MakeMuteButton(Transform parent, Vector2 anchoredPos)
+    {
+        var btn = MakeButton(parent, "MuteBtn", anchoredPos, new Vector2(90, 32), "", PanelDarker, null, 12, pixelFont: true);
+        var label = btn.GetComponentInChildren<TMPro.TextMeshProUGUI>();
+        void Refresh() => label.text = global::SoundManager.IsMuted ? "MUTED" : "SOUND";
+        Refresh();
+        btn.onClick.AddListener(() => { global::SoundManager.ToggleMute(); Refresh(); });
+        return btn;
+    }
+
+    // flatFill skips the Kenney sliced-border sprite entirely — for small cells
+    // (roulette's corner/split/street/six-line spots, ~14-28px), the frame's fixed
+    // ~14px border eats nearly the whole button, leaving text sitting on top of
+    // border art instead of a clean fill. Flat color reads far better at that size.
     public static Button MakeButton(Transform parent, string name, Vector2 anchoredPos, Vector2 size,
-        string label, Color color, UnityEngine.Events.UnityAction onClick, int fontSize = 18, bool pixelFont = false)
+        string label, Color color, UnityEngine.Events.UnityAction onClick, int fontSize = 18, bool pixelFont = false, bool flatFill = false)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
         var img = go.AddComponent<Image>();
-        img.sprite = RoundedRect();
-        img.type = Image.Type.Sliced;
+        if (flatFill)
+        {
+            img.sprite = null;
+            img.type = Image.Type.Simple;
+        }
+        else
+        {
+            img.sprite = RoundedRect();
+            img.type = Image.Type.Sliced;
+        }
         img.color = color;
         var rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = size;
@@ -196,6 +251,16 @@ public static class UIFactory
         var shadow = go.AddComponent<Shadow>();
         shadow.effectColor = new Color(0, 0, 0, 0.45f);
         shadow.effectDistance = new Vector2(0, -2);
+
+        // The sliced border art above is tinted by the same fill color as the rest
+        // of the button, so a dark fill (PanelDarker, and DisabledButton once
+        // SetButtonState swaps to it later) renders a dark border too — invisible
+        // against this project's near-black backgrounds ("black on black"). A
+        // separate frame overlay, tinted a fixed light silver instead of the fill
+        // color, keeps the edge readable no matter what color the fill is now or
+        // becomes later. Skipped only for flatFill (tiny cells already crowded).
+        if (!flatFill)
+            AddSharpFrame(go, AccentDim, square: true);
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
@@ -226,12 +291,15 @@ public static class UIFactory
             var labelRt = labelGO.GetComponent<RectTransform>();
             labelRt.anchorMin = Vector2.zero;
             labelRt.anchorMax = Vector2.one;
-            labelRt.offsetMin = new Vector2(4, 2);
-            labelRt.offsetMax = new Vector2(-4, -2);
+            labelRt.offsetMin = new Vector2(10, 6);
+            labelRt.offsetMax = new Vector2(-10, -6);
         }
         else
         {
-            MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: size, color: TextLight, style: FontStyle.Bold);
+            // Same margin reasoning as the pixel-font path above — full button size
+            // let text sit flush against (or under) the sliced border art.
+            var inset = new Vector2(Mathf.Max(size.x - 16f, 4f), Mathf.Max(size.y - 10f, 4f));
+            MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: inset, color: TextLight, style: FontStyle.Bold);
             var labelText = go.GetComponentInChildren<Text>();
             labelText.text = label;
         }

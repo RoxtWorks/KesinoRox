@@ -48,6 +48,17 @@ public class ProfitLossTrackerUI : MonoBehaviour
         Refresh(false);
     }
 
+    // Bulk-load path for session restore — see HistoryPanelUI.LoadRecords for why
+    // this exists instead of calling AddRecord in a loop (each call there rebuilds
+    // the whole grid from scratch).
+    public void LoadRecords(IEnumerable<SpinRecord> loaded)
+    {
+        records.Clear();
+        records.AddRange(loaded);
+        if (records.Count > MaxRecords) records.RemoveRange(0, records.Count - MaxRecords);
+        Refresh(false);
+    }
+
     void Refresh(bool animateNewest)
     {
         foreach (var b in blocks) Destroy(b);
@@ -69,8 +80,11 @@ public class ProfitLossTrackerUI : MonoBehaviour
             var go = new GameObject($"PLBlock_{i}");
             go.transform.SetParent(canvas, false);
             var img = go.AddComponent<Image>();
-            img.sprite = UIFactory.RoundedRect();
-            img.type = Image.Type.Sliced;
+            // Flat fill, not the sliced border sprite — at 38px the border art ate
+            // most of the cell, and black text on top of it read poorly against
+            // both the green and red fills. A solid color block reads far cleaner.
+            img.sprite = null;
+            img.type = Image.Type.Simple;
             img.color = c;
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(CellSize, CellSize);
@@ -78,14 +92,19 @@ public class ProfitLossTrackerUI : MonoBehaviour
 
             // The actual profit/loss for that spin, not the winning number — "was it
             // a win or a loss" is already the block's color; the number people
-            // actually want here is how much.
+            // actually want here is how much. White + shadow instead of flat black —
+            // legible against green, red, and the neutral gray alike. Compact form
+            // (1.3k) keeps big numbers from getting squeezed unreadably small.
             string sign = rec.NetChange > 0 ? "+" : "";
             var numText = UIFactory.MakeText(go.transform, "Num", Vector2.zero, 13,
-                sizeDelta: new Vector2(CellSize - 4f, CellSize - 4f), color: Color.black, style: FontStyle.Bold);
+                sizeDelta: new Vector2(CellSize - 4f, CellSize - 4f), color: Color.white, style: FontStyle.Bold);
             numText.resizeTextForBestFit = true;
             numText.resizeTextMinSize = 8;
             numText.resizeTextMaxSize = 13;
-            numText.text = $"{sign}{rec.NetChange}";
+            numText.text = $"{sign}{UIFactory.FormatMoneyCompact(rec.NetChange)}";
+            var numShadow = numText.gameObject.AddComponent<Shadow>();
+            numShadow.effectColor = new Color(0, 0, 0, 0.9f);
+            numShadow.effectDistance = new Vector2(1, -1);
 
             blocks.Add(go);
             if (animateNewest && i == records.Count - 1) JuiceTweens.PopIn(this, rt, overshoot: 1.3f, duration: 0.25f);

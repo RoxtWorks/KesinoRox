@@ -57,6 +57,7 @@ crashlytics-build.properties
 roulettesim_save.txt
 blackjacksim_save.txt
 baccaratsim_save.txt
+crapssim_save.txt
 
 # Editor screenshots taken during verification
 Assets/Screenshots/
