@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 5aceac71f4f3a4933b7213b4d356506a
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Runtime/Resources/Shaders/Mosaic.shader
+  uploadId: 896492

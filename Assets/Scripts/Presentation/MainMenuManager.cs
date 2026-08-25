@@ -1,14 +1,28 @@
+using DG.Tweening;
+using TMPro;
 using UnityEngine;
-using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 // Entry-point scene — placeholder title + one button per game. Same procedural-at-
 // runtime construction pattern as GameManager/BlackjackGameManager (built entirely
-// in Start(), no prefabs/serialized fields), just much smaller since there's no
-// gameplay here.
+// in Start(), no prefabs/serialized fields). First screen in the project to use the
+// TMP pixel font + DOTween hover/press juice instead of UIFactory's legacy Text —
+// a deliberately contained pilot before rolling the pattern out further.
 public class MainMenuManager : MonoBehaviour
 {
+    static readonly Color BgColor = new Color(0.04f, 0.03f, 0.06f);
+    static readonly Color Gold = new Color(0.92f, 0.75f, 0.28f);
+    static readonly Color GoldDim = new Color(0.6f, 0.48f, 0.18f);
+    static readonly Color RouletteGreen = new Color(0.16f, 0.55f, 0.32f);
+    static readonly Color BlackjackRed = new Color(0.62f, 0.16f, 0.18f);
+    static readonly Color TextDim = new Color(0.72f, 0.7f, 0.66f);
+
+    TMP_FontAsset pixelFont;
+
     void Start()
     {
+        Application.runInBackground = true;
+        pixelFont = Resources.Load<TMP_FontAsset>("Fonts/ThaleahFat SDF");
         SetupCamera();
         SetupUI();
     }
@@ -19,9 +33,7 @@ public class MainMenuManager : MonoBehaviour
         var cam = camGO.AddComponent<Camera>();
         camGO.tag = "MainCamera";
         cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = new Color(0.015f, 0.02f, 0.03f);
-        // Runtime-created cameras don't get an AudioListener automatically — only
-        // the Editor's own "Create > Camera" menu does that.
+        cam.backgroundColor = BgColor;
         camGO.AddComponent<AudioListener>();
     }
 
@@ -34,11 +46,11 @@ public class MainMenuManager : MonoBehaviour
         var canvasGO = new GameObject("Canvas");
         var canvas = canvasGO.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        var scaler = canvasGO.AddComponent<UnityEngine.UI.CanvasScaler>();
-        scaler.uiScaleMode = UnityEngine.UI.CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        var scaler = canvasGO.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
-        canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+        canvasGO.AddComponent<GraphicRaycaster>();
 
         UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
@@ -48,25 +60,86 @@ public class MainMenuManager : MonoBehaviour
 #else
                 Application.Quit();
 #endif
-            }, 13);
+            }, 13, pixelFont: true);
 
-        // Placeholder title — swap the string whenever there's a real name, nothing
-        // else needs to change.
-        UIFactory.MakeFramedPanel(canvasGO.transform, "TitlePanelBg", new Vector2(0, 220), new Vector2(560, 140), Color.black);
-        var title = UIFactory.MakeText(canvasGO.transform, "TitleText", new Vector2(0, 220), 42,
-            sizeDelta: new Vector2(520, 100), color: UIFactory.Accent, style: FontStyle.Bold);
+        var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 230), 96,
+            new Vector2(1100, 160), Gold, FontStyles.Bold);
         title.text = "CASINO SIM";
+        title.enableVertexGradient = true;
+        title.colorGradient = new VertexGradient(
+            new Color(1f, 0.87f, 0.45f), new Color(1f, 0.87f, 0.45f),
+            new Color(0.72f, 0.52f, 0.12f), new Color(0.72f, 0.52f, 0.12f));
 
-        var subtitle = UIFactory.MakeText(canvasGO.transform, "SubtitleText", new Vector2(0, 90), 16,
-            sizeDelta: new Vector2(400, 30), color: UIFactory.TextDim);
-        subtitle.text = "Choose a game";
+        var titleRt = title.GetComponent<RectTransform>();
+        titleRt.DOAnchorPosY(240, 1.6f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo)
+            .SetLink(titleRt.gameObject, LinkBehaviour.KillOnDestroy);
 
-        var rouletteBtn = UIFactory.MakeButton(canvasGO.transform, "RouletteBtn", new Vector2(-160, -60), new Vector2(280, 90),
-            "ROULETTE", UIFactory.Positive, () => SceneManager.LoadScene("Main"), 22);
-        var blackjackBtn = UIFactory.MakeButton(canvasGO.transform, "BlackjackBtn", new Vector2(160, -60), new Vector2(280, 90),
-            "BLACKJACK", UIFactory.AccentDim, () => SceneManager.LoadScene("Blackjack"), 22);
+        var subtitle = MakePixelText(canvasGO.transform, "SubtitleText", new Vector2(0, 110), 28,
+            new Vector2(500, 50), TextDim, FontStyles.Normal);
+        subtitle.text = "choose a game";
 
-        JuiceTweens.PopIn(this, rouletteBtn.GetComponent<RectTransform>(), overshoot: 1.15f, duration: 0.3f);
-        JuiceTweens.PopIn(this, blackjackBtn.GetComponent<RectTransform>(), overshoot: 1.15f, duration: 0.3f);
+        MakeGameButton(canvasGO.transform, "RouletteBtn", new Vector2(-190, -80), new Vector2(320, 110),
+            "ROULETTE", RouletteGreen, () => SceneTransition.Load("Main"));
+        MakeGameButton(canvasGO.transform, "BlackjackBtn", new Vector2(190, -80), new Vector2(320, 110),
+            "BLACKJACK", BlackjackRed, () => SceneTransition.Load("Blackjack"));
+    }
+
+    TextMeshProUGUI MakePixelText(Transform parent, string name, Vector2 anchoredPos, float fontSize,
+        Vector2 sizeDelta, Color color, FontStyles style)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<TextMeshProUGUI>();
+        if (pixelFont != null) t.font = pixelFont;
+        t.fontSize = fontSize;
+        t.color = color;
+        t.fontStyle = style;
+        t.alignment = TextAlignmentOptions.Center;
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = sizeDelta;
+        rt.anchoredPosition = anchoredPos;
+        return t;
+    }
+
+    void MakeGameButton(Transform parent, string name, Vector2 anchoredPos, Vector2 size,
+        string label, Color color, UnityEngine.Events.UnityAction onClick)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        var img = go.AddComponent<Image>();
+        img.sprite = UIFactory.RoundedRect();
+        img.type = Image.Type.Sliced;
+        img.color = color;
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = size;
+        rt.anchoredPosition = anchoredPos;
+
+        var shadow = go.AddComponent<Shadow>();
+        shadow.effectColor = new Color(0, 0, 0, 0.5f);
+        shadow.effectDistance = new Vector2(0, -3);
+
+        var border = go.AddComponent<Outline>();
+        border.effectColor = Gold;
+        border.effectDistance = new Vector2(2, -2);
+
+        var btn = go.AddComponent<Button>();
+        btn.targetGraphic = img;
+        btn.transition = Selectable.Transition.None;
+        if (onClick != null) btn.onClick.AddListener(onClick);
+        go.AddComponent<DOTweenButtonFX>();
+
+        var labelGO = new GameObject("Label");
+        labelGO.transform.SetParent(go.transform, false);
+        var labelText = labelGO.AddComponent<TextMeshProUGUI>();
+        if (pixelFont != null) labelText.font = pixelFont;
+        labelText.fontSize = 34;
+        labelText.color = Color.white;
+        labelText.alignment = TextAlignmentOptions.Center;
+        labelText.text = label;
+        var labelRt = labelGO.GetComponent<RectTransform>();
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = Vector2.zero;
+        labelRt.offsetMax = Vector2.zero;
     }
 }

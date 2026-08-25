@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: d11b775f431c9411d8e8f9020749855d
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Demos/ComposedTransitions/Scene.unity
+  uploadId: 896492

@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: a1dd9932b3829453c821717c9b44ea67
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/DoubleWipe/DoubleWipeNoiseToonDot.asset
+  uploadId: 896492

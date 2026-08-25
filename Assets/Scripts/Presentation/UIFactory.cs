@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,8 +23,50 @@ public static class UIFactory
 
     static Sprite roundedSprite;
     static Font cachedFont;
+    static TMP_FontAsset pixelFont;
+    static bool pixelFontLoadAttempted;
 
     public static Font Font => cachedFont ??= Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+
+    // Hero/header pixel font — only used for titles and section headers (see
+    // MakeHeroTitle/MakeSectionHeader). Dense functional text (number grids, card
+    // ranks, live status messages) stays on the legacy font above for legibility at
+    // small sizes.
+    public static TMP_FontAsset PixelFont
+    {
+        get
+        {
+            if (pixelFont == null && !pixelFontLoadAttempted)
+            {
+                pixelFont = Resources.Load<TMP_FontAsset>("Fonts/ThaleahFat SDF");
+                pixelFontLoadAttempted = true;
+            }
+            return pixelFont;
+        }
+    }
+
+    static readonly VertexGradient GoldGradient = new VertexGradient(
+        new Color(1f, 0.87f, 0.45f), new Color(1f, 0.87f, 0.45f),
+        new Color(0.72f, 0.52f, 0.12f), new Color(0.72f, 0.52f, 0.12f));
+
+    // Big pixel-font screen title with the same gold vertex gradient as the main
+    // menu's "CASINO SIM" — used once per game screen for its hero header.
+    public static TextMeshProUGUI MakeHeroTitle(Transform parent, string name, Vector2 anchoredPos, string text, float fontSize = 30)
+    {
+        var go = new GameObject(name);
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<TextMeshProUGUI>();
+        if (PixelFont != null) t.font = PixelFont;
+        t.fontSize = fontSize;
+        t.alignment = TextAlignmentOptions.Center;
+        t.enableVertexGradient = true;
+        t.colorGradient = GoldGradient;
+        t.text = text;
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(500, 60);
+        rt.anchoredPosition = anchoredPos;
+        return t;
+    }
 
     // Procedural 9-sliced rounded rect — corner alpha falls off with a couple of
     // pixels of antialiasing so it doesn't look jagged when scaled up.
@@ -68,15 +111,24 @@ public static class UIFactory
         return t;
     }
 
-    public static Text MakeSectionHeader(Transform parent, string label, Vector2 anchoredPos, Vector2 sizeDelta)
+    public static TextMeshProUGUI MakeSectionHeader(Transform parent, string label, Vector2 anchoredPos, Vector2 sizeDelta)
     {
-        var t = MakeText(parent, $"Header_{label}", anchoredPos, 15, TextAnchor.MiddleLeft, sizeDelta, Accent, FontStyle.Bold);
+        var go = new GameObject($"Header_{label}");
+        go.transform.SetParent(parent, false);
+        var t = go.AddComponent<TextMeshProUGUI>();
+        if (PixelFont != null) t.font = PixelFont;
+        t.fontSize = 16;
+        t.color = Accent;
+        t.alignment = TextAlignmentOptions.MidlineLeft;
         t.text = label.ToUpperInvariant();
+        var rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = sizeDelta;
+        rt.anchoredPosition = anchoredPos;
         return t;
     }
 
     public static Button MakeButton(Transform parent, string name, Vector2 anchoredPos, Vector2 size,
-        string label, Color color, UnityEngine.Events.UnityAction onClick, int fontSize = 18)
+        string label, Color color, UnityEngine.Events.UnityAction onClick, int fontSize = 18, bool pixelFont = false)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
@@ -103,9 +155,35 @@ public static class UIFactory
         btn.colors = colors;
         if (onClick != null) btn.onClick.AddListener(onClick);
 
-        MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: size, color: TextLight, style: FontStyle.Bold);
-        var labelText = go.GetComponentInChildren<Text>();
-        labelText.text = label;
+        if (pixelFont && PixelFont != null)
+        {
+            var labelGO = new GameObject("Label");
+            labelGO.transform.SetParent(go.transform, false);
+            var tmp = labelGO.AddComponent<TextMeshProUGUI>();
+            tmp.font = PixelFont;
+            tmp.text = label;
+            tmp.color = TextLight;
+            tmp.alignment = TextAlignmentOptions.Center;
+            // Autosize instead of a fixed fontSize — the pixel font's glyph metrics
+            // differ from the legacy font this replaced, so a fixed size risks
+            // clipping/overflow on buttons whose box was tuned for the old font.
+            tmp.enableAutoSizing = true;
+            tmp.fontSizeMin = 8;
+            tmp.fontSizeMax = fontSize + 4;
+            var labelRt = labelGO.GetComponent<RectTransform>();
+            labelRt.anchorMin = Vector2.zero;
+            labelRt.anchorMax = Vector2.one;
+            labelRt.offsetMin = new Vector2(4, 2);
+            labelRt.offsetMax = new Vector2(-4, -2);
+        }
+        else
+        {
+            MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: size, color: TextLight, style: FontStyle.Bold);
+            var labelText = go.GetComponentInChildren<Text>();
+            labelText.text = label;
+        }
+
+        go.AddComponent<DOTweenButtonFX>();
         return btn;
     }
 
@@ -171,6 +249,8 @@ public static class UIFactory
         var text = MakeText(fillGO.transform, "Label", Vector2.zero, 16, sizeDelta: new Vector2(diameter - 10, diameter - 10),
             color: TextLight, style: FontStyle.Bold);
         text.text = label;
+
+        go.AddComponent<DOTweenButtonFX>();
         return btn;
     }
 

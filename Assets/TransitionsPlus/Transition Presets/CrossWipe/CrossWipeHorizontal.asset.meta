@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 9a24a46fcdaeb412aa7e2786c03c3b15
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/CrossWipe/CrossWipeHorizontal.asset
+  uploadId: 896492

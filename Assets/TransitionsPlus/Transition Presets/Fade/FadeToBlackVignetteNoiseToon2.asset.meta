@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: b88d7a5a0bf204f58910bfbe0784d6b5
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/Fade/FadeToBlackVignetteNoiseToon2.asset
+  uploadId: 896492

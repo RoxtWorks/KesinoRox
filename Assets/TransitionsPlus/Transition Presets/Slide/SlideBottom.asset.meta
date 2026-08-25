@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: f3301989000604838a07f19e509fbd2b
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/Slide/SlideBottom.asset
+  uploadId: 896492

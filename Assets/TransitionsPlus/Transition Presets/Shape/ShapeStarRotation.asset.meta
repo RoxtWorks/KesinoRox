@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 51f0fbe0a919c423094ec44671725ec9
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/Shape/ShapeStarRotation.asset
+  uploadId: 896492

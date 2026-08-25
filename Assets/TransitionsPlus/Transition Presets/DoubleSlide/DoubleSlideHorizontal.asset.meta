@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 5a504b161083b4958bb6d2600e6bc20f
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Transition Presets/DoubleSlide/DoubleSlideHorizontal.asset
+  uploadId: 896492

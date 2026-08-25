@@ -145,11 +145,7 @@ public class BettingUIController : MonoBehaviour
         // Backdrop behind the whole betting felt so it reads as one panel against
         // the 3D table instead of buttons floating loose over the wheel graphic.
         UIFactory.MakePanel(tableRoot, "BettingPanelBg", new Vector2(PanelCenterX, -120), new Vector2(TotalWidth + 60, 650), UIFactory.PanelDark);
-        // Plain centered text, not MakeSectionHeader — that helper left-aligns within
-        // its box, which reads as "shifted left" once the box is wider than the text.
-        var tableHeader = UIFactory.MakeText(tableRoot, "Header_BettingTable", new Vector2(PanelCenterX, 195), 15,
-            TextAnchor.MiddleCenter, new Vector2(300, 24), UIFactory.Accent, FontStyle.Bold);
-        tableHeader.text = "BETTING TABLE";
+        UIFactory.MakeHeroTitle(tableRoot, "Header_BettingTable", new Vector2(PanelCenterX, 195), "BETTING TABLE", 26);
 
         UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
         statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 155), 20,
@@ -237,19 +233,19 @@ public class BettingUIController : MonoBehaviour
         // sit outside the original CLEAR/SPIN/REPEAT trio with room to spare — the
         // felt panel is wide enough that this doesn't crowd anything.
         UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(PanelCenterX - 390, bottomY), new Vector2(120, 46),
-            "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13);
+            "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
 
         UIFactory.MakeButton(tableRoot, "ClearBetsBtn", new Vector2(PanelCenterX - 210, bottomY), new Vector2(150, 46),
-            "CLEAR BETS", UIFactory.RedBet, ClearBets, 14);
+            "CLEAR BETS", UIFactory.RedBet, ClearBets, 14, pixelFont: true);
 
         spinButton = UIFactory.MakeButton(tableRoot, "SpinButton", new Vector2(PanelCenterX, bottomY), new Vector2(200, 54),
-            "SPIN", UIFactory.Positive, TrySpin, 20);
+            "SPIN", UIFactory.Positive, TrySpin, 20, pixelFont: true);
 
         repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(PanelCenterX + 210, bottomY), new Vector2(150, 46),
-            "REPEAT BET", UIFactory.AccentDim, RepeatLastBet, 14);
+            "REPEAT BET", UIFactory.AccentDim, RepeatLastBet, 14, pixelFont: true);
 
         UIFactory.MakeButton(tableRoot, "DoubleAllBtn", new Vector2(PanelCenterX + 390, bottomY), new Vector2(140, 46),
-            "DOUBLE ALL", UIFactory.AccentDim, DoubleAllBets, 13);
+            "DOUBLE ALL", UIFactory.AccentDim, DoubleAllBets, 13, pixelFont: true);
 
         RefreshBetTray();
     }
@@ -487,7 +483,7 @@ public class BettingUIController : MonoBehaviour
     void AddOutsideBtnSized(Transform canvas, string label, BetType type, Vector2 pos, float w, float h, Color? color = null)
     {
         UIFactory.MakeButton(canvas, $"Bet_{type}", pos, new Vector2(w, h), label,
-            color ?? new Color(0.24f, 0.26f, 0.29f), () => PlaceOutside(type), 17);
+            color ?? new Color(0.24f, 0.26f, 0.29f), () => PlaceOutside(type), 17, pixelFont: true);
         RegisterSpot(type, null, pos);
     }
 

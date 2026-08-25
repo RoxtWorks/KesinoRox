@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 // Thin orchestrator: builds the scene/UI at runtime and wires Presentation controllers
 // to the Core session objects (Bankroll, SpinResultGenerator). Holds no betting/payout
@@ -141,14 +140,14 @@ public class GameManager : MonoBehaviour
 #else
                 Application.Quit();
 #endif
-            }, 13);
+            }, 13, pixelFont: true);
 
         // Mirrors Blackjack.unity's own nav button back here — same top-corner
         // placement, opposite side from CLOSE APP.
         UIFactory.MakeButton(canvasGO.transform, "BlackjackNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
-            "BLACKJACK ▸", UIFactory.AccentDim, () => SceneManager.LoadScene("Blackjack"), 13);
+            "BLACKJACK >", UIFactory.AccentDim, () => SceneTransition.Load("Blackjack"), 13, pixelFont: true);
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 470), new Vector2(180, 32),
-            "☰ MENU", UIFactory.PanelDarker, () => SceneManager.LoadScene("MainMenu"), 13);
+            "MENU", UIFactory.PanelDarker, () => SceneTransition.Load("MainMenu"), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();

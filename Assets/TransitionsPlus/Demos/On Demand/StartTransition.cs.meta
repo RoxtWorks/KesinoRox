@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: d865300cd27f544f6952b302d2d695ed
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Demos/On Demand/StartTransition.cs
+  uploadId: 896492

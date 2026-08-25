@@ -103,9 +103,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         tableRoot = tableRootGO.transform;
 
         UIFactory.MakePanel(tableRoot, "BlackjackPanelBg", new Vector2(PanelCenterX, -100), new Vector2(1000, 620), UIFactory.PanelDark);
-        var header = UIFactory.MakeText(tableRoot, "Header_Blackjack", new Vector2(PanelCenterX, 195), 15,
-            TextAnchor.MiddleCenter, new Vector2(300, 24), UIFactory.Accent, FontStyle.Bold);
-        header.text = "BLACKJACK TABLE";
+        UIFactory.MakeHeroTitle(tableRoot, "Header_Blackjack", new Vector2(PanelCenterX, 195), "BLACKJACK TABLE", 26);
         UIFactory.MakeText(tableRoot, "DealerLabel", new Vector2(PanelCenterX, 155), 13,
             TextAnchor.MiddleCenter, new Vector2(200, 20), UIFactory.TextDim, FontStyle.Bold).text = "DEALER";
 
@@ -179,25 +177,25 @@ public class BlackjackBettingUIController : MonoBehaviour
         repeatBaseColor = UIFactory.AccentDim;
 
         clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-170f, ActionButtonY), new Vector2(140, 46),
-            "CLEAR BET", clearBaseColor, OnClearBetClicked, 13);
+            "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
         dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, ActionButtonY), new Vector2(160, 54),
-            "DEAL", dealBaseColor, OnDealClicked, 18);
+            "DEAL", dealBaseColor, OnDealClicked, 18, pixelFont: true);
         repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(170f, ActionButtonY), new Vector2(140, 46),
-            "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12);
+            "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
 
         // Action-phase row: HIT / STAND / DOUBLE / SPLIT / SURRENDER — built here but
         // repositioned and shown/hidden dynamically by LayoutActionButtons(), since
         // which ones apply changes hand to hand.
         hitButton = UIFactory.MakeButton(tableRoot, "HitBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "HIT", UIFactory.AccentDim, OnHitClicked, 15);
+            "HIT", UIFactory.AccentDim, OnHitClicked, 15, pixelFont: true);
         standButton = UIFactory.MakeButton(tableRoot, "StandBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "STAND", UIFactory.AccentDim, OnStandClicked, 15);
+            "STAND", UIFactory.AccentDim, OnStandClicked, 15, pixelFont: true);
         doubleButton = UIFactory.MakeButton(tableRoot, "DoubleBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "DOUBLE", UIFactory.AccentDim, OnDoubleClicked, 14);
+            "DOUBLE", UIFactory.AccentDim, OnDoubleClicked, 14, pixelFont: true);
         splitButton = UIFactory.MakeButton(tableRoot, "SplitBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "SPLIT", UIFactory.AccentDim, OnSplitClicked, 15);
+            "SPLIT", UIFactory.AccentDim, OnSplitClicked, 15, pixelFont: true);
         surrenderButton = UIFactory.MakeButton(tableRoot, "SurrenderBtn", new Vector2(0, ActionButtonY), new Vector2(140, 46),
-            "SURRENDER", UIFactory.RedBet, OnSurrenderClicked, 12);
+            "SURRENDER", UIFactory.RedBet, OnSurrenderClicked, 12, pixelFont: true);
 
         foreach (var btn in new[] { hitButton, standButton, doubleButton, splitButton, surrenderButton })
             buttonWasVisible[btn] = false;
@@ -219,9 +217,9 @@ public class BlackjackBettingUIController : MonoBehaviour
         UIFactory.MakeText(insurancePromptGO.transform, "InsuranceText", new Vector2(0, 20), 16,
             sizeDelta: new Vector2(380, 28), color: UIFactory.Accent, style: FontStyle.Bold).text = "Dealer shows an Ace — take insurance?";
         UIFactory.MakeButton(insurancePromptGO.transform, "InsuranceYes", new Vector2(-90, -20), new Vector2(140, 34),
-            "YES (half bet)", UIFactory.Positive, OnInsuranceYes, 12);
+            "YES (half bet)", UIFactory.Positive, OnInsuranceYes, 12, pixelFont: true);
         UIFactory.MakeButton(insurancePromptGO.transform, "InsuranceNo", new Vector2(90, -20), new Vector2(140, 34),
-            "NO", UIFactory.RedBet, OnInsuranceNo, 13);
+            "NO", UIFactory.RedBet, OnInsuranceNo, 13, pixelFont: true);
         insurancePromptGO.SetActive(false);
     }
 

@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 7d100994d096148b6b58d3ff66da62d6
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Runtime/Resources/Shaders/Burn.shader
+  uploadId: 896492

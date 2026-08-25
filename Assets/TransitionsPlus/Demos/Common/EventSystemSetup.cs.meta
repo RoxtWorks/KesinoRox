@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: 9a63985a25fc9402ab3a05f5085dc221
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Demos/Common/EventSystemSetup.cs
+  uploadId: 896492

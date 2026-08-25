@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 5dbe7bf3f87c24be6b78feab38335f65
+DefaultImporter:
+  externalObjects: {}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Demos/Fade Between Cameras/Demo.unity
+  uploadId: 896492

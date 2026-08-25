@@ -49,7 +49,7 @@ public class BankrollHudUI : MonoBehaviour
             {
                 if (long.TryParse(budgetInput.text, out long value) && value > 0)
                     onAddBudget?.Invoke(value);
-            }, 13);
+            }, 13, pixelFont: true);
         addFundsRt = addFundsBtn.GetComponent<RectTransform>();
 
         UIFactory.MakeButton(canvas, "ResetBtn", new Vector2(125, 435), new Vector2(110, 32),
@@ -57,7 +57,7 @@ public class BankrollHudUI : MonoBehaviour
             {
                 long value = long.TryParse(budgetInput.text, out long v) && v > 0 ? v : bankroll.StartingBalance;
                 onReset?.Invoke(value);
-            }, 13);
+            }, 13, pixelFont: true);
 
         // Only shown when the balance can't cover even the cheapest chip — the one
         // real "why would I keep playing" dead end, since PlaceMulti otherwise just

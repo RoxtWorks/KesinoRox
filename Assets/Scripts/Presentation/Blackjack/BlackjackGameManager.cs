@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 // Blackjack's equivalent of GameManager — thin orchestrator, same composition
 // pattern: builds the scene/UI procedurally at runtime (no prefabs/serialized
@@ -112,12 +111,12 @@ public class BlackjackGameManager : MonoBehaviour
 #else
                 Application.Quit();
 #endif
-            }, 13);
+            }, 13, pixelFont: true);
 
         UIFactory.MakeButton(canvasGO.transform, "RouletteNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
-            "◂ ROULETTE", UIFactory.AccentDim, () => SceneManager.LoadScene("Main"), 13);
+            "< ROULETTE", UIFactory.AccentDim, () => SceneTransition.Load("Main"), 13, pixelFont: true);
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 470), new Vector2(180, 32),
-            "☰ MENU", UIFactory.PanelDarker, () => SceneManager.LoadScene("MainMenu"), 13);
+            "MENU", UIFactory.PanelDarker, () => SceneTransition.Load("MainMenu"), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();

@@ -1,0 +1,18 @@
+fileFormatVersion: 2
+guid: f316dd1e1ff094cad976e832b7cbe370
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences: []
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
+AssetOrigin:
+  serializedVersion: 1
+  productId: 266067
+  packageName: Transitions Plus
+  packageVersion: 5.2.1
+  assetPath: Assets/TransitionsPlus/Demos/Fade Between Cameras/MoveSphere.cs
+  uploadId: 896492
