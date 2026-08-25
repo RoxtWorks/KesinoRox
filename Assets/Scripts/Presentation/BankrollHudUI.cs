@@ -23,7 +23,10 @@ public class BankrollHudUI : MonoBehaviour
         // was left over from an earlier layout and just reads as misaligned now that
         // nothing to its right forces it over. Framed panel (border + fill) so it
         // actually stands out from the near-black scene behind it instead of blending in.
-        UIFactory.MakeFramedPanel(canvas, "HudPanelBg", new Vector2(0, 465), new Vector2(620, 90), UIFactory.PanelDarker);
+        // Tall enough to actually enclose the input/button row with real margin —
+        // the crisp sharp-frame border makes any overlap far more visible than the
+        // old soft Outline effect ever did.
+        UIFactory.MakeFramedPanel(canvas, "HudPanelBg", new Vector2(0, 465), new Vector2(620, 130), UIFactory.PanelDarker);
 
         hudText = UIFactory.MakeText(canvas, "BankrollHud", new Vector2(0, 480), 24,
             sizeDelta: new Vector2(600, 40), color: UIFactory.TextLight, style: FontStyle.Bold);

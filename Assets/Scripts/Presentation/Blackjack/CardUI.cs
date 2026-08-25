@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -53,17 +54,62 @@ public class CardUI : MonoBehaviour
 
     public void SetCard(Card card, bool animatePopIn = true)
     {
+        // Reused CardUI instances can be mid-FlyOut (faded, off-position) from a
+        // previous round — kill that before resetting, so a reused instance always
+        // starts its next deal-in from a clean, fully-opaque state.
+        bg.DOKill();
+        label.DOKill();
         bg.color = CardWhite;
         label.color = card.IsRed ? RedSuit : BlackSuit;
         label.text = $"{RankLabel(card.Rank)}\n{SuitSymbol(card.Suit)}";
-        if (animatePopIn) JuiceTweens.PopIn(this, rt);
+        if (animatePopIn) DealIn();
     }
 
     public void SetFaceDown(bool animatePopIn = true)
     {
+        bg.DOKill();
+        label.DOKill();
         bg.color = CardBack;
         label.text = "";
-        if (animatePopIn) JuiceTweens.PopIn(this, rt);
+        if (animatePopIn) DealIn();
+    }
+
+    const float DealDuration = 0.2f;
+    static readonly Vector2 DealFromOffset = new Vector2(35f, 55f);
+    const float DealFromRotation = -14f;
+
+    // Cards fly in from just above/beside their final slot with a quick scale-up
+    // and a small rotation flourish that settles flat — reads much closer to a real
+    // dealt card landing than a plain in-place pop.
+    void DealIn()
+    {
+        rt.DOKill();
+        Vector2 finalPos = rt.anchoredPosition;
+        rt.anchoredPosition = finalPos + DealFromOffset;
+        rt.localScale = Vector3.one * 0.6f;
+        rt.localRotation = Quaternion.Euler(0f, 0f, DealFromRotation);
+
+        var seq = DOTween.Sequence();
+        seq.Join(rt.DOAnchorPos(finalPos, DealDuration).SetEase(Ease.OutBack));
+        seq.Join(rt.DOScale(1f, DealDuration).SetEase(Ease.OutBack));
+        seq.Join(rt.DORotateQuaternion(Quaternion.identity, DealDuration).SetEase(Ease.OutQuad));
+        seq.SetLink(gameObject, LinkBehaviour.KillOnDestroy);
+    }
+
+    const float FlyOutDuration = 0.22f;
+
+    // Swept off toward the top of the table instead of just vanishing — this is the
+    // "getting out" half of the deal-in/deal-out pairing.
+    public void FlyOut(System.Action onComplete = null)
+    {
+        rt.DOKill();
+        var seq = DOTween.Sequence();
+        seq.Join(rt.DOAnchorPos(rt.anchoredPosition + new Vector2(0f, 90f), FlyOutDuration).SetEase(Ease.InBack));
+        seq.Join(rt.DOScale(0.5f, FlyOutDuration).SetEase(Ease.InBack));
+        seq.Join(bg.DOFade(0f, FlyOutDuration * 0.85f));
+        seq.Join(label.DOFade(0f, FlyOutDuration * 0.7f));
+        seq.OnComplete(() => onComplete?.Invoke());
+        seq.SetLink(gameObject, LinkBehaviour.KillOnDestroy);
     }
 
     static string RankLabel(Rank rank) => rank switch

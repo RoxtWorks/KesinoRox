@@ -102,7 +102,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         tableRootRT.anchoredPosition = Vector2.zero;
         tableRoot = tableRootGO.transform;
 
-        UIFactory.MakePanel(tableRoot, "BlackjackPanelBg", new Vector2(PanelCenterX, -100), new Vector2(1000, 620), UIFactory.PanelDark);
+        UIFactory.MakePanel(tableRoot, "BlackjackPanelBg", new Vector2(PanelCenterX, -100), new Vector2(1000, 660), UIFactory.PanelDark);
         UIFactory.MakeHeroTitle(tableRoot, "Header_Blackjack", new Vector2(PanelCenterX, 195), "BLACKJACK TABLE", 26);
         UIFactory.MakeText(tableRoot, "DealerLabel", new Vector2(PanelCenterX, 155), 13,
             TextAnchor.MiddleCenter, new Vector2(200, 20), UIFactory.TextDim, FontStyle.Bold).text = "DEALER";
@@ -140,9 +140,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         betSpotFillImg = betSpotGO.AddComponent<Image>();
         betSpotFillImg.sprite = UIFactory.Circle();
         betSpotFillImg.color = new Color(1f, 1f, 1f, 0.06f);
-        var betSpotOutline = betSpotGO.AddComponent<Outline>();
-        betSpotOutline.effectColor = UIFactory.Accent;
-        betSpotOutline.effectDistance = new Vector2(2f, 2f);
+        UIFactory.AddSharpFrame(betSpotGO, UIFactory.Accent, square: false);
         var betSpotBtnComponent = betSpotGO.AddComponent<Button>();
         betSpotBtnComponent.targetGraphic = betSpotFillImg;
         betSpotBtnComponent.onClick.AddListener(OnBetSpotClicked);
@@ -233,20 +231,25 @@ public class BlackjackBettingUIController : MonoBehaviour
         streakBadgeGO = new GameObject("StreakBadge");
         streakBadgeGO.transform.SetParent(tableRoot, false);
         var rt = streakBadgeGO.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(260, 90);
+        rt.sizeDelta = new Vector2(300, 90);
         rt.anchoredPosition = new Vector2(-480, 465);
-        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(260, 90), Color.black);
+        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(300, 90), Color.black);
 
         var textGO = new GameObject("StreakText");
         textGO.transform.SetParent(streakBadgeGO.transform, false);
         var textRt = textGO.AddComponent<RectTransform>();
-        textRt.sizeDelta = new Vector2(240, 70);
+        textRt.sizeDelta = new Vector2(280, 70);
         textRt.anchoredPosition = Vector2.zero;
         streakText = textGO.AddComponent<TextMeshProUGUI>();
         streakText.alignment = TextAlignmentOptions.Center;
-        streakText.fontSize = 30;
         streakText.fontStyle = FontStyles.Bold;
         streakText.raycastTarget = false;
+        // Fixed size, not autosize — TextAnimator_TMP's SetText() doesn't trigger
+        // TMP's autosize recalculation, so it just kept rendering at fontSizeMax
+        // regardless of content length and spilling out of the badge anyway. 20pt
+        // in a widened 280px box comfortably fits "12 WIN STREAK" and beyond.
+        streakText.enableWordWrapping = false;
+        streakText.fontSize = 20;
         streakText.outlineWidth = 0.25f;
         streakText.outlineColor = new Color32(0, 0, 0, 230);
         streakAnimator = textGO.AddComponent<TextAnimator_TMP>();
@@ -577,6 +580,7 @@ public class BlackjackBettingUIController : MonoBehaviour
                 juiceManager?.Flash(new Color(0.3f, 1f, 0.4f, 0.28f), 0.7f);
                 juiceManager?.PlayConfetti(2f);
                 juiceManager?.PulseLight(0.9f, 0.7f);
+                juiceManager?.PlayMoneyFountain(Vector2.zero);
                 floatingText?.Show($"BLACKJACK! +{net}", UIFactory.Positive, fontSize: 42);
             }
             else

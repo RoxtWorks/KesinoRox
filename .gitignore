@@ -56,6 +56,12 @@ crashlytics-build.properties
 # Save files — real playtest data, not project source
 roulettesim_save.txt
 blackjacksim_save.txt
+baccaratsim_save.txt
 
 # Editor screenshots taken during verification
 Assets/Screenshots/
+
+# Downloaded reference video + extracted frames — design reference only, not
+# project source, and not ours to redistribute via the repo.
+gameplay.mp4*
+frames/

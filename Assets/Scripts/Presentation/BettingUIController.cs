@@ -798,6 +798,7 @@ public class BettingUIController : MonoBehaviour
                     juiceManager?.Flash(new Color(0.3f, 1f, 0.4f, 0.28f), 0.7f);
                     juiceManager?.PlayConfetti(2f);
                     juiceManager?.PulseLight(0.9f, 0.7f);
+                    juiceManager?.PlayMoneyFountain(Vector2.zero);
                     floatingText?.Show($"HUGE WIN +{net}!", UIFactory.Positive, fontSize: 42);
                 }
                 else if (payoutRatio >= 4)

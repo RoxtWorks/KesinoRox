@@ -28,6 +28,44 @@ public static class UIFactory
 
     public static Font Font => cachedFont ??= Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
+    // Heat UI's pre-rendered border art (Assets/Heat - Complete Modern UI/Textures/
+    // Borders, copied into Resources/HeatUI so Resources.Load can find them at
+    // runtime) — crisp anti-aliased shapes instead of this project's own procedural
+    // Circle()/RoundedRect() textures. Used for the decorative ring/frame overlay
+    // added on top of chips, bet spots, buttons, and framed text panels; the
+    // underlying colored fill still comes from RoundedRect()/Circle() as before.
+    static Sprite heatCircleRing, heatSquareRing;
+
+    public static Sprite HeatCircleRing() => heatCircleRing ??= Resources.Load<Sprite>("HeatUI/RadialRing");
+    public static Sprite HeatSquareRing() => heatSquareRing ??= Resources.Load<Sprite>("HeatUI/SquareRing");
+
+    // Adds a crisp pre-rendered ring/frame on top of an existing panel/chip/button,
+    // replacing the soft, slightly hazy look of Unity's built-in Outline shader
+    // component this project used everywhere before. square=true for rect panels
+    // and buttons (SquareRing), false for circular elements (RadialRing).
+    public static Image AddSharpFrame(GameObject target, Color color, bool square, float inset = 0f)
+    {
+        var frameGO = new GameObject("SharpFrame");
+        frameGO.transform.SetParent(target.transform, false);
+        var img = frameGO.AddComponent<Image>();
+        img.sprite = square ? HeatSquareRing() : HeatCircleRing();
+        // Simple (stretch), not Sliced — this project's panels/buttons range from
+        // tiny badges to huge felt backdrops, and Sliced's 9-slice border math blew
+        // up into a solid fill on anything smaller than ~2x the source border. A
+        // plain stretch scales the ring thickness proportionally with the element
+        // instead, which reads fine across that whole size range.
+        img.type = Image.Type.Simple;
+        img.color = color;
+        img.raycastTarget = false;
+        var targetRt = target.GetComponent<RectTransform>();
+        var rt = frameGO.GetComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = new Vector2(inset, inset);
+        rt.offsetMax = new Vector2(-inset, -inset);
+        return img;
+    }
+
     // Hero/header pixel font — only used for titles and section headers (see
     // MakeHeroTitle/MakeSectionHeader). Dense functional text (number grids, card
     // ranks, live status messages) stays on the legacy font above for legibility at
@@ -188,12 +226,20 @@ public static class UIFactory
     }
 
     static Sprite circleSprite;
+    // Heat UI's own pre-rendered filled circle — sharper, better-antialiased than
+    // the procedural version this used to generate at runtime. Falls back to the
+    // old procedural circle if the Resources asset is ever missing, so nothing
+    // breaks if HeatUI/RadialFilled.png isn't present for some reason.
     public static Sprite Circle()
     {
         if (circleSprite != null) return circleSprite;
-        // 64px was fine for roulette's ~40-64px badges/chips, but blackjack's bet
-        // spot displays this same sprite at up to 160px — noticeably blurry at that
-        // scale. 256px covers every current use with room to spare.
+        circleSprite = Resources.Load<Sprite>("HeatUI/RadialFilled");
+        if (circleSprite == null) circleSprite = ProceduralCircle();
+        return circleSprite;
+    }
+
+    static Sprite ProceduralCircle()
+    {
         const int size = 256;
         var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
         var pixels = new Color[size * size];
@@ -207,8 +253,7 @@ public static class UIFactory
             }
         tex.SetPixels(pixels);
         tex.Apply();
-        circleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
-        return circleSprite;
+        return Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), 100f);
     }
 
     // Casino chip look: outer accent ring + inner fill disc + value label, built from
@@ -250,6 +295,9 @@ public static class UIFactory
             color: TextLight, style: FontStyle.Bold);
         text.text = label;
 
+        // No extra sharp-frame overlay here (unlike other chip-shaped elements) —
+        // the outer ring IS the selected/unselected signal (ChipSelectorUI recolors
+        // it directly), and a fixed-color overlay on top would wash that out.
         go.AddComponent<DOTweenButtonFX>();
         return btn;
     }
@@ -258,10 +306,14 @@ public static class UIFactory
     // that it barely reads as a panel at all — this adds a thin gold border (a
     // slightly larger rect behind the fill) so it visibly frames its content instead
     // of blending into the backdrop.
+    // Crisp Heat-UI frame overlay instead of the plain slightly-larger colored rect
+    // this used to draw behind the panel to fake a border — same call signature/
+    // return value, every existing caller gets the sharper look for free.
     public static GameObject MakeFramedPanel(Transform parent, string name, Vector2 anchoredPos, Vector2 size, Color color, Color? borderColor = null, float borderThickness = 3f)
     {
-        MakePanel(parent, name + "_Border", anchoredPos, size + new Vector2(borderThickness, borderThickness) * 2f, borderColor ?? AccentDim, shadow: true);
-        return MakePanel(parent, name, anchoredPos, size, color, shadow: false);
+        var panel = MakePanel(parent, name, anchoredPos, size, color, shadow: true);
+        AddSharpFrame(panel, borderColor ?? AccentDim, square: true, inset: -borderThickness);
+        return panel;
     }
 
     public static GameObject MakePanel(Transform parent, string name, Vector2 anchoredPos, Vector2 size, Color color, bool shadow = true)

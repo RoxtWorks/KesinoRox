@@ -15,6 +15,7 @@ public class MainMenuManager : MonoBehaviour
     static readonly Color GoldDim = new Color(0.6f, 0.48f, 0.18f);
     static readonly Color RouletteGreen = new Color(0.16f, 0.55f, 0.32f);
     static readonly Color BlackjackRed = new Color(0.62f, 0.16f, 0.18f);
+    static readonly Color BaccaratBlue = new Color(0.16f, 0.32f, 0.58f);
     static readonly Color TextDim = new Color(0.72f, 0.7f, 0.66f);
 
     TMP_FontAsset pixelFont;
@@ -78,10 +79,12 @@ public class MainMenuManager : MonoBehaviour
             new Vector2(500, 50), TextDim, FontStyles.Normal);
         subtitle.text = "choose a game";
 
-        MakeGameButton(canvasGO.transform, "RouletteBtn", new Vector2(-190, -80), new Vector2(320, 110),
+        MakeGameButton(canvasGO.transform, "RouletteBtn", new Vector2(-300, -80), new Vector2(260, 100),
             "ROULETTE", RouletteGreen, () => SceneTransition.Load("Main"));
-        MakeGameButton(canvasGO.transform, "BlackjackBtn", new Vector2(190, -80), new Vector2(320, 110),
+        MakeGameButton(canvasGO.transform, "BlackjackBtn", new Vector2(0, -80), new Vector2(260, 100),
             "BLACKJACK", BlackjackRed, () => SceneTransition.Load("Blackjack"));
+        MakeGameButton(canvasGO.transform, "BaccaratBtn", new Vector2(300, -80), new Vector2(260, 100),
+            "BACCARAT", BaccaratBlue, () => SceneTransition.Load("Baccarat"));
     }
 
     TextMeshProUGUI MakePixelText(Transform parent, string name, Vector2 anchoredPos, float fontSize,
@@ -118,9 +121,7 @@ public class MainMenuManager : MonoBehaviour
         shadow.effectColor = new Color(0, 0, 0, 0.5f);
         shadow.effectDistance = new Vector2(0, -3);
 
-        var border = go.AddComponent<Outline>();
-        border.effectColor = Gold;
-        border.effectDistance = new Vector2(2, -2);
+        UIFactory.AddSharpFrame(go, Gold, square: true);
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
@@ -132,14 +133,18 @@ public class MainMenuManager : MonoBehaviour
         labelGO.transform.SetParent(go.transform, false);
         var labelText = labelGO.AddComponent<TextMeshProUGUI>();
         if (pixelFont != null) labelText.font = pixelFont;
-        labelText.fontSize = 34;
         labelText.color = Color.white;
         labelText.alignment = TextAlignmentOptions.Center;
         labelText.text = label;
+        // Autosize instead of a fixed 34pt — narrower buttons (3-across instead of
+        // 2-across once Baccarat joined) would otherwise let long labels overflow.
+        labelText.enableAutoSizing = true;
+        labelText.fontSizeMin = 16;
+        labelText.fontSizeMax = 34;
         var labelRt = labelGO.GetComponent<RectTransform>();
         labelRt.anchorMin = Vector2.zero;
         labelRt.anchorMax = Vector2.one;
-        labelRt.offsetMin = Vector2.zero;
-        labelRt.offsetMax = Vector2.zero;
+        labelRt.offsetMin = new Vector2(6, 2);
+        labelRt.offsetMax = new Vector2(-6, -2);
     }
 }

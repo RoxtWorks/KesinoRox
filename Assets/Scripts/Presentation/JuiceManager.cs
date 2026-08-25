@@ -1,4 +1,5 @@
 using System.Collections;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -15,9 +16,11 @@ public class JuiceManager : MonoBehaviour
     Coroutine shakeRoutine;
     Light keyLight;
     float keyLightBaseIntensity;
+    Transform canvasRoot;
 
     public void Build(Transform canvas, Transform cameraTransform, Vector3 confettiWorldPos, Light keyLight = null)
     {
+        canvasRoot = canvas;
         this.cameraTransform = cameraTransform;
         cameraBaseRot = cameraTransform.localRotation;
         cameraBasePos = cameraTransform.localPosition;
@@ -96,6 +99,46 @@ public class JuiceManager : MonoBehaviour
         if (confetti == null) return;
         confetti.Play();
         if (intensity > 1f) confetti.Emit(Mathf.RoundToInt(60 * (intensity - 1f)));
+    }
+
+    // Coin burst — a handful of gold discs launched from a screen point in
+    // staggered parabolic arcs (DOTween's built-in jump), spinning as they fly,
+    // then fading out before landing. Reserved for the top win tiers alongside
+    // confetti — a screen-space UI effect (unlike confetti's world-space particles)
+    // since it needs to read clearly over the felt/HUD regardless of camera angle.
+    public void PlayMoneyFountain(Vector2 originAnchoredPos, int coinCount = 16)
+    {
+        if (canvasRoot == null) return;
+        for (int i = 0; i < coinCount; i++)
+        {
+            var go = new GameObject("Coin");
+            go.transform.SetParent(canvasRoot, false);
+            var img = go.AddComponent<Image>();
+            img.sprite = UIFactory.Circle();
+            img.color = new Color(1f, 0.85f, 0.25f);
+            img.raycastTarget = false;
+            var rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta = Vector2.one * Random.Range(16f, 28f);
+            rt.anchoredPosition = originAnchoredPos;
+            go.transform.SetAsLastSibling();
+
+            float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            float distance = Random.Range(120f, 340f);
+            Vector2 target = originAnchoredPos + new Vector2(Mathf.Cos(angle) * distance, Random.Range(-40f, 140f));
+            float jumpPower = Random.Range(160f, 300f);
+            float duration = Random.Range(0.65f, 1f);
+            float delay = Random.Range(0f, 0.15f);
+
+            var seq = DOTween.Sequence();
+            seq.AppendInterval(delay);
+            seq.Append(rt.DOJumpAnchorPos(target, jumpPower, 1, duration).SetEase(Ease.OutQuad));
+            seq.Join(rt.DORotate(new Vector3(0f, 0f, Random.Range(-360f, 360f)), duration, RotateMode.FastBeyond360));
+            seq.AppendInterval(0.1f);
+            seq.Append(img.DOFade(0f, 0.3f));
+            var goRef = go;
+            seq.OnComplete(() => { if (goRef != null) Destroy(goRef); });
+            seq.SetLink(go, LinkBehaviour.KillOnDestroy);
+        }
     }
 
     // Rotation-based rather than position-based — this scene's camera looks almost

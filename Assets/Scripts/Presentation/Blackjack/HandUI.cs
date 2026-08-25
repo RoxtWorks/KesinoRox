@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -107,13 +108,24 @@ public class HandUI
 
     public void Clear()
     {
-        foreach (var card in cardVisuals) Object.Destroy(card.gameObject);
+        var cardsToFlyOut = new List<CardUI>(cardVisuals);
         cardVisuals.Clear();
         lastRenderedCount = 0;
         totalText.text = "";
         doubledTag.gameObject.SetActive(false);
         playingLabel.gameObject.SetActive(false);
-        root.gameObject.SetActive(false);
+
+        if (cardsToFlyOut.Count == 0)
+        {
+            root.gameObject.SetActive(false);
+            return;
+        }
+        foreach (var card in cardsToFlyOut)
+            card.FlyOut(() => { if (card != null) Object.Destroy(card.gameObject); });
+        // Root stays active (and visible) through the fly-out so the cards' motion
+        // actually renders — deactivating it immediately would hide them mid-flight.
+        var rootGO = root.gameObject;
+        DOVirtual.DelayedCall(0.3f, () => { if (rootGO != null) rootGO.SetActive(false); });
     }
 
     void EnsureCardCount(int count)

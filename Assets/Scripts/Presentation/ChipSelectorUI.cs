@@ -59,9 +59,14 @@ public class ChipSelectorUI : MonoBehaviour
         soundManager?.PlayClick();
     }
 
+    // Bright near-white gold vs a dark, clearly-dimmed grey — wider contrast than
+    // before so which chip is selected reads at a glance instead of blending in.
+    static readonly Color SelectedRing = new Color(1f, 0.92f, 0.55f);
+    static readonly Color UnselectedRing = new Color(0.28f, 0.28f, 0.3f);
+
     void HighlightSelected()
     {
         for (int i = 0; i < ringImages.Count; i++)
-            ringImages[i].color = ChipDenominations.Values[i] == SelectedChip ? UIFactory.Accent : new Color(0.4f, 0.4f, 0.4f);
+            ringImages[i].color = ChipDenominations.Values[i] == SelectedChip ? SelectedRing : UnselectedRing;
     }
 }
