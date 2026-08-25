@@ -28,16 +28,18 @@ public static class UIFactory
 
     public static Font Font => cachedFont ??= Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-    // Heat UI's pre-rendered border art (Assets/Heat - Complete Modern UI/Textures/
-    // Borders, copied into Resources/HeatUI so Resources.Load can find them at
-    // runtime) — crisp anti-aliased shapes instead of this project's own procedural
-    // Circle()/RoundedRect() textures. Used for the decorative ring/frame overlay
-    // added on top of chips, bet spots, buttons, and framed text panels; the
-    // underlying colored fill still comes from RoundedRect()/Circle() as before.
-    static Sprite heatCircleRing, heatSquareRing;
+    // Drop-in art location: whatever pre-rendered border/panel/shape PNGs the project
+    // is currently using — Heat UI's for now, source-agnostic by design. Swapping to
+    // a different art pack (or hand-provided files) means replacing the files in
+    // Assets/Resources/UI/ and, if the shapes changed meaningfully, retuning the
+    // import settings below (see CircleFrameSprite/SquareFrameSprite for what each
+    // file needs) — nothing else in this file, or any caller, has to change.
+    // Required files: RadialFilled.png (solid filled circle — see Circle()),
+    // RadialRing.png (circular ring/outline), SquareRing.png (rect ring/outline).
+    static Sprite circleFrameSprite, squareFrameSprite;
 
-    public static Sprite HeatCircleRing() => heatCircleRing ??= Resources.Load<Sprite>("HeatUI/RadialRing");
-    public static Sprite HeatSquareRing() => heatSquareRing ??= Resources.Load<Sprite>("HeatUI/SquareRing");
+    public static Sprite CircleFrameSprite() => circleFrameSprite ??= Resources.Load<Sprite>("UI/RadialRing");
+    public static Sprite SquareFrameSprite() => squareFrameSprite ??= Resources.Load<Sprite>("UI/SquareRing");
 
     // Adds a crisp pre-rendered ring/frame on top of an existing panel/chip/button,
     // replacing the soft, slightly hazy look of Unity's built-in Outline shader
@@ -48,7 +50,7 @@ public static class UIFactory
         var frameGO = new GameObject("SharpFrame");
         frameGO.transform.SetParent(target.transform, false);
         var img = frameGO.AddComponent<Image>();
-        img.sprite = square ? HeatSquareRing() : HeatCircleRing();
+        img.sprite = square ? SquareFrameSprite() : CircleFrameSprite();
         // Simple (stretch), not Sliced — this project's panels/buttons range from
         // tiny badges to huge felt backdrops, and Sliced's 9-slice border math blew
         // up into a solid fill on anything smaller than ~2x the source border. A
@@ -226,14 +228,14 @@ public static class UIFactory
     }
 
     static Sprite circleSprite;
-    // Heat UI's own pre-rendered filled circle — sharper, better-antialiased than
-    // the procedural version this used to generate at runtime. Falls back to the
-    // old procedural circle if the Resources asset is ever missing, so nothing
-    // breaks if HeatUI/RadialFilled.png isn't present for some reason.
+    // A pre-rendered filled circle from Assets/Resources/UI/RadialFilled.png —
+    // sharper, better-antialiased than the procedural version this used to generate
+    // at runtime. Falls back to that procedural circle if the file is ever missing
+    // (e.g. mid-swap to a new art pack), so nothing breaks in the meantime.
     public static Sprite Circle()
     {
         if (circleSprite != null) return circleSprite;
-        circleSprite = Resources.Load<Sprite>("HeatUI/RadialFilled");
+        circleSprite = Resources.Load<Sprite>("UI/RadialFilled");
         if (circleSprite == null) circleSprite = ProceduralCircle();
         return circleSprite;
     }

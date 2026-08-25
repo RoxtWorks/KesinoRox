@@ -12,10 +12,6 @@ public class MainMenuManager : MonoBehaviour
 {
     static readonly Color BgColor = new Color(0.04f, 0.03f, 0.06f);
     static readonly Color Gold = new Color(0.92f, 0.75f, 0.28f);
-    static readonly Color GoldDim = new Color(0.6f, 0.48f, 0.18f);
-    static readonly Color RouletteGreen = new Color(0.16f, 0.55f, 0.32f);
-    static readonly Color BlackjackRed = new Color(0.62f, 0.16f, 0.18f);
-    static readonly Color BaccaratBlue = new Color(0.16f, 0.32f, 0.58f);
     static readonly Color TextDim = new Color(0.72f, 0.7f, 0.66f);
 
     TMP_FontAsset pixelFont;
@@ -79,12 +75,19 @@ public class MainMenuManager : MonoBehaviour
             new Vector2(500, 50), TextDim, FontStyles.Normal);
         subtitle.text = "choose a game";
 
-        MakeGameButton(canvasGO.transform, "RouletteBtn", new Vector2(-300, -80), new Vector2(260, 100),
-            "ROULETTE", RouletteGreen, () => SceneTransition.Load("Main"));
-        MakeGameButton(canvasGO.transform, "BlackjackBtn", new Vector2(0, -80), new Vector2(260, 100),
-            "BLACKJACK", BlackjackRed, () => SceneTransition.Load("Blackjack"));
-        MakeGameButton(canvasGO.transform, "BaccaratBtn", new Vector2(300, -80), new Vector2(260, 100),
-            "BACCARAT", BaccaratBlue, () => SceneTransition.Load("Baccarat"));
+        // Reads GameCatalog instead of one hardcoded button per game — adding a
+        // fourth game later means adding one catalog entry, not a new call here too.
+        const float buttonWidth = 260f, gap = 40f;
+        var games = GameCatalog.Games;
+        float totalWidth = games.Count * buttonWidth + (games.Count - 1) * gap;
+        float startX = -totalWidth / 2f + buttonWidth / 2f;
+        for (int i = 0; i < games.Count; i++)
+        {
+            var entry = games[i];
+            var pos = new Vector2(startX + i * (buttonWidth + gap), -80);
+            MakeGameButton(canvasGO.transform, $"{entry.SceneName}Btn", pos, new Vector2(buttonWidth, 100),
+                entry.DisplayName, entry.Color, () => SceneTransition.Load(entry.SceneName));
+        }
     }
 
     TextMeshProUGUI MakePixelText(Transform parent, string name, Vector2 anchoredPos, float fontSize,

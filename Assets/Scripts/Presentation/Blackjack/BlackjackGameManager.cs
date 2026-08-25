@@ -20,6 +20,7 @@ public class BlackjackGameManager : MonoBehaviour
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
+    GameSwitcherPanel switcherPanel;
     Transform cameraTransform;
     Light keyLight;
 
@@ -113,10 +114,10 @@ public class BlackjackGameManager : MonoBehaviour
 #endif
             }, 13, pixelFont: true);
 
-        UIFactory.MakeButton(canvasGO.transform, "RouletteNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
-            "< ROULETTE", UIFactory.AccentDim, () => SceneTransition.Load("Main"), 13, pixelFont: true);
-        UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 470), new Vector2(180, 32),
-            "MENU", UIFactory.PanelDarker, () => SceneTransition.Load("MainMenu"), 13, pixelFont: true);
+        switcherPanel = gameObject.AddComponent<GameSwitcherPanel>();
+        switcherPanel.Build(canvasGO.transform, "Blackjack");
+        UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
+            "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();

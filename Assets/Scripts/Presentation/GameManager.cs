@@ -24,6 +24,7 @@ public class GameManager : MonoBehaviour
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
+    GameSwitcherPanel switcherPanel;
     Transform cameraTransform;
     Light keyLight;
 
@@ -142,12 +143,12 @@ public class GameManager : MonoBehaviour
 #endif
             }, 13, pixelFont: true);
 
-        // Mirrors Blackjack.unity's own nav button back here — same top-corner
-        // placement, opposite side from CLOSE APP.
-        UIFactory.MakeButton(canvasGO.transform, "BlackjackNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
-            "BLACKJACK >", UIFactory.AccentDim, () => SceneTransition.Load("Blackjack"), 13, pixelFont: true);
-        UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 470), new Vector2(180, 32),
-            "MENU", UIFactory.PanelDarker, () => SceneTransition.Load("MainMenu"), 13, pixelFont: true);
+        // MENU opens an in-scene popup listing the other games instead of navigating
+        // back to the (now pointless, once you've picked a game) main menu scene.
+        switcherPanel = gameObject.AddComponent<GameSwitcherPanel>();
+        switcherPanel.Build(canvasGO.transform, "Main");
+        UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
+            "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         soundManager = gameObject.AddComponent<SoundManager>();
         soundManager.Build();
