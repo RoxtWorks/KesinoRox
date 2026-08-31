@@ -39,7 +39,7 @@ public class CrapsBettingUIController : MonoBehaviour
     bool rolling;
 
     long lastLineAmount;
-    bool lastLineWasDontPass;
+    readonly Dictionary<CrapsBetType, long> lastOneRollBets = new Dictionary<CrapsBetType, long>();
 
     TextMeshProUGUI streakText;
     TextAnimator_TMP streakAnimator;
@@ -48,8 +48,24 @@ public class CrapsBettingUIController : MonoBehaviour
     Transform tableRoot;
     Text statusText;
     Dice3D die1UI, die2UI;
-    Text oddsStatusText;
-    Button oddsButton;
+
+    // Odds confirmation modal — auto-opens whenever a point is established on
+    // Pass Line or a Come wager parks at its own point, so the player never has
+    // to hunt for an ADD ODDS button. Discrete 1x/2x/3x/etc. multiplier buttons
+    // match the real casino format (3-4-5x standard, extended to crapless's
+    // extra point numbers via CrapsResolver.MaxOddsMultiplier). SKIP = explicit
+    // decline, scrim click = same.
+    GameObject oddsModalRoot;
+    Text oddsModalTitleText, oddsModalOddsText, oddsModalAmountText, oddsModalCapText;
+    Button[] multiplierButtons;
+    Text[] multiplierLabels;
+    CrapsBetType? oddsModalBetType;
+    ComeWager oddsModalComeWager;
+    int oddsModalPoint;
+    bool oddsModalIsDontSide;
+    long oddsModalCap;
+    long oddsModalBaseAmount;
+    long oddsModalPendingAmount;
     Button rollButton, clearBetButton, repeatButton, undoButton, betsToggleButton;
     TextMeshProUGUI betsToggleLabel;
     Color rollBaseColor, clearBaseColor, repeatBaseColor;
@@ -73,7 +89,7 @@ public class CrapsBettingUIController : MonoBehaviour
         public readonly List<GameObject> ChipVisuals = new List<GameObject>();
     }
 
-    FlatBarSpot passSpot, dontPassSpot, comeSpot, dontComeSpot, fieldSpot;
+    FlatBarSpot passSpot, comeSpot, fieldSpot;
     readonly Dictionary<int, NumberSpot> placeSpots = new Dictionary<int, NumberSpot>();
     readonly Dictionary<int, FlatBarSpot> hardSpots = new Dictionary<int, FlatBarSpot>();
     readonly Dictionary<CrapsBetType, FlatBarSpot> propSpots = new Dictionary<CrapsBetType, FlatBarSpot>();
@@ -141,7 +157,7 @@ public class CrapsBettingUIController : MonoBehaviour
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
         statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 300), 16,
             sizeDelta: new Vector2(580, 30), color: UIFactory.Accent, style: FontStyle.Bold);
-        statusText.text = "Come out — place Pass or Don't Pass, then ROLL";
+        statusText.text = "Come out — place Pass Line, then ROLL";
 
         // Felt background — confined to the bottom half of the screen (top edge
         // ~10, bottom ~-424, well clear of the resultsStrip CrapsGameManager places
@@ -185,8 +201,7 @@ public class CrapsBettingUIController : MonoBehaviour
         // Come sits directly ABOVE the Place row, Pass Line directly BELOW it —
         // the numbers grid sits "wrapped" between them instead of both bars stacked
         // above the numbers, per the reference table's framing.
-        comeSpot = BuildBarSpot("ComeSpot", new Vector2(-360, -155), new Vector2(640, 46), UIFactory.AccentDim, () => OnComeBetClicked(false));
-        dontComeSpot = BuildBarSpot("DontComeSpot", new Vector2(360, -155), new Vector2(640, 46), UIFactory.AccentDim, () => OnComeBetClicked(true));
+        comeSpot = BuildBarSpot("ComeSpot", new Vector2(0, -155), new Vector2(1280, 46), UIFactory.AccentDim, () => OnComeBetClicked());
 
         // Place — kept horizontal, but whichever number matches the live point gets
         // a bright amber ring (see UpdatePointHighlight, called from RefreshBetDisplay
@@ -200,16 +215,9 @@ public class CrapsBettingUIController : MonoBehaviour
             placeSpots[n] = BuildNumberSpot(n, pos, 74, UIFactory.AccentDim, PlacePayoutLabel(n), () => OnPlaceBetClicked(n), square: true);
         }
 
-        passSpot = BuildBarSpot("PassLineSpot", new Vector2(-360, -325), new Vector2(640, 54), UIFactory.Positive, () => OnLineBetClicked(false));
-        dontPassSpot = BuildBarSpot("DontPassSpot", new Vector2(360, -325), new Vector2(640, 54), UIFactory.Negative, () => OnLineBetClicked(true));
+        passSpot = BuildBarSpot("PassLineSpot", new Vector2(0, -325), new Vector2(1280, 54), UIFactory.Positive, () => OnLineBetClicked());
 
-        oddsStatusText = UIFactory.MakeText(tableRoot, "OddsStatusText", new Vector2(-260, -378), 13,
-            sizeDelta: new Vector2(340, 30), color: UIFactory.TextDim);
-        oddsStatusText.text = "No odds-eligible bet right now";
-        oddsButton = UIFactory.MakeButton(tableRoot, "OddsBtn", new Vector2(260, -378), new Vector2(160, 34),
-            "ADD ODDS", UIFactory.AccentDim, OnAddOddsClicked, 13, pixelFont: true);
-
-        const float actionY = -428;
+        const float actionY = -378;
         clearBaseColor = UIFactory.RedBet;
         rollBaseColor = UIFactory.Positive;
         repeatBaseColor = UIFactory.AccentDim;
@@ -232,6 +240,7 @@ public class CrapsBettingUIController : MonoBehaviour
         betsToggleLabel = betsToggleButton.GetComponentInChildren<TextMeshProUGUI>();
 
         BuildStreakBadge();
+        BuildOddsModal(canvas);
 
         RefreshBetDisplay();
         RefreshActionButtons();
@@ -440,11 +449,11 @@ public class CrapsBettingUIController : MonoBehaviour
         if (undoStack.Count > MaxUndoDepth) undoStack.RemoveAt(0);
     }
 
-    void OnLineBetClicked(bool isDontPass)
+    void OnLineBetClicked()
     {
         if (currentRound.Phase != CrapsPhase.ComeOut)
         {
-            statusText.text = "Point already set — Pass/Don't Pass locks until it resolves";
+            statusText.text = "Point already set — Pass Line locks until it resolves";
             FlashBlocked();
             return;
         }
@@ -457,20 +466,19 @@ public class CrapsBettingUIController : MonoBehaviour
             FlashBlocked();
             return;
         }
-        var type = isDontPass ? CrapsBetType.DontPass : CrapsBetType.PassLine;
-        currentRound.PlaceBet(type, chip);
+        currentRound.PlaceBet(CrapsBetType.PassLine, chip);
         roundTotalStaked += chip;
         soundManager?.PlayChip();
-        PushUndoBet(type, chip);
+        PushUndoBet(CrapsBetType.PassLine, chip);
         RefreshBetDisplay();
         RefreshActionButtons();
     }
 
-    void OnComeBetClicked(bool isDontCome)
+    void OnComeBetClicked()
     {
         if (currentRound.Phase != CrapsPhase.Point)
         {
-            statusText.text = "Come/Don't Come only available once a point is set";
+            statusText.text = "Come only available once a point is set";
             FlashBlocked();
             return;
         }
@@ -481,7 +489,7 @@ public class CrapsBettingUIController : MonoBehaviour
             FlashBlocked();
             return;
         }
-        var wager = currentRound.PlaceComeBet(isDontCome, chip);
+        var wager = currentRound.PlaceComeBet(chip);
         roundTotalStaked += chip;
         soundManager?.PlayChip();
         // Only undoable while still "traveling" (no point yet) — once parked it's a
@@ -576,70 +584,175 @@ public class CrapsBettingUIController : MonoBehaviour
         RefreshActionButtons();
     }
 
-    string FindOddsTargetLabel()
+    void BuildOddsModal(Transform canvas)
     {
-        if (currentRound.Phase == CrapsPhase.Point)
+        oddsModalRoot = new GameObject("OddsModal");
+        oddsModalRoot.transform.SetParent(canvas, false);
+        var rt = oddsModalRoot.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var scrimGO = new GameObject("Scrim");
+        scrimGO.transform.SetParent(oddsModalRoot.transform, false);
+        var scrimRt = scrimGO.AddComponent<RectTransform>();
+        scrimRt.anchorMin = Vector2.zero;
+        scrimRt.anchorMax = Vector2.one;
+        scrimRt.offsetMin = Vector2.zero;
+        scrimRt.offsetMax = Vector2.zero;
+        var scrimImg = scrimGO.AddComponent<Image>();
+        scrimImg.color = new Color(0.02f, 0.02f, 0.03f, 0.93f);
+        var scrimBtn = scrimGO.AddComponent<Button>();
+        scrimBtn.transition = Selectable.Transition.None;
+        scrimBtn.onClick.AddListener(HideOddsModal);
+
+        var panel = UIFactory.MakeFramedPanel(oddsModalRoot.transform, "OddsModalPanel", Vector2.zero, new Vector2(660, 460), Color.black);
+
+        oddsModalTitleText = UIFactory.MakeText(panel.transform, "OddsModalTitle", new Vector2(0, 185), 26,
+            sizeDelta: new Vector2(620, 36), color: UIFactory.TextLight, style: FontStyle.Bold);
+        oddsModalOddsText = UIFactory.MakeText(panel.transform, "OddsModalOdds", new Vector2(0, 130), 18,
+            sizeDelta: new Vector2(620, 62), color: UIFactory.Accent);
+        oddsModalAmountText = UIFactory.MakeText(panel.transform, "OddsModalAmount", new Vector2(0, 58), 36,
+            sizeDelta: new Vector2(620, 50), color: UIFactory.TextLight, style: FontStyle.Bold);
+        oddsModalCapText = UIFactory.MakeText(panel.transform, "OddsModalCap", new Vector2(0, 20), 17,
+            sizeDelta: new Vector2(620, 26), color: UIFactory.Accent);
+
+        // Discrete multiplier buttons (1x–5x) — real casino format. Only buttons up
+        // to MaxOddsMultiplier(point) are shown; the rest are hidden per OpenOddsModal.
+        multiplierButtons = new Button[5];
+        multiplierLabels = new Text[5];
+        float[] btnX = { -224f, -112f, 0f, 112f, 224f };
+        for (int i = 0; i < 5; i++)
         {
-            if (currentRound.GetBet(CrapsBetType.PassLine) > 0 && currentRound.GetBet(CrapsBetType.PassOdds) == 0)
-                return $"Pass Line (point {currentRound.Point})";
-            if (currentRound.GetBet(CrapsBetType.DontPass) > 0 && currentRound.GetBet(CrapsBetType.DontPassOdds) == 0)
-                return $"Don't Pass (point {currentRound.Point})";
+            var go = new GameObject($"OddsMultBtn_{i + 1}x");
+            go.transform.SetParent(panel.transform, false);
+            var btnRt = go.AddComponent<RectTransform>();
+            btnRt.sizeDelta = new Vector2(102, 66);
+            btnRt.anchorMin = btnRt.anchorMax = new Vector2(0.5f, 0.5f);
+            btnRt.pivot = new Vector2(0.5f, 0.5f);
+            btnRt.anchoredPosition = new Vector2(btnX[i], -48f);
+            var img = go.AddComponent<Image>();
+            img.sprite = UIFactory.RoundedRect();
+            img.type = Image.Type.Sliced;
+            img.color = UIFactory.AccentDim;
+            var btn = go.AddComponent<Button>();
+            btn.targetGraphic = img;
+            multiplierButtons[i] = btn;
+
+            multiplierLabels[i] = UIFactory.MakeText(go.transform, "Label", Vector2.zero, 15,
+                TextAnchor.MiddleCenter, new Vector2(98, 62), UIFactory.TextLight);
         }
-        var comeTarget = currentRound.ComeWagers.LastOrDefault(w => w.Point != null && w.OddsAmount == 0);
-        if (comeTarget != null)
-            return $"{(comeTarget.IsDontCome ? "Don't Come" : "Come")} {comeTarget.Point}";
-        return null;
+
+        UIFactory.MakeButton(panel.transform, "OddsModalConfirm", new Vector2(-115, -155), new Vector2(220, 58),
+            "CONFIRM ODDS", UIFactory.Positive, OnOddsModalConfirm, 16, pixelFont: true);
+        UIFactory.MakeButton(panel.transform, "OddsModalSkip", new Vector2(115, -155), new Vector2(220, 58),
+            "SKIP ODDS", UIFactory.AccentDim, HideOddsModal, 16, pixelFont: true);
+
+        oddsModalRoot.SetActive(false);
     }
 
-    // One shared "ADD ODDS" button targets whichever point/come-point is currently
-    // eligible (main line first, then the most recently parked Come/Don't Come) —
-    // simpler than a dedicated sub-button floating next to every possible marker,
-    // while Core still supports the full, correct odds behavior underneath.
-    void OnAddOddsClicked()
+    void OpenOddsModal(CrapsBetType? betType, ComeWager comeWager, string title, int point, long baseAmount, bool isDontSide)
     {
-        long chip = chipSelector.SelectedChip;
+        oddsModalBetType = betType;
+        oddsModalComeWager = comeWager;
+        oddsModalPoint = point;
+        oddsModalIsDontSide = isDontSide;
+        oddsModalBaseAmount = baseAmount;
+        int maxMult = CrapsResolver.MaxOddsMultiplier(point);
+        oddsModalCap = baseAmount * maxMult;
+        oddsModalPendingAmount = baseAmount; // default to 1x
 
-        if (currentRound.Phase == CrapsPhase.Point && currentRound.GetBet(CrapsBetType.PassLine) > 0 && currentRound.GetBet(CrapsBetType.PassOdds) == 0)
+        oddsModalTitleText.text = title;
+        oddsModalCapText.text = $"Max: {maxMult}x odds  =  {UIFactory.FormatMoney(oddsModalCap)}";
+
+        // Configure multiplier buttons 1x..maxMult; hide the rest.
+        for (int i = 0; i < 5; i++)
         {
-            long cap = currentRound.GetBet(CrapsBetType.PassLine) * 3;
-            if (chip > cap) { statusText.text = "Odds capped at 3x your line bet"; FlashBlocked(); return; }
-            if (!bankroll.TryWithdraw(chip)) { FlashBlocked(); return; }
-            currentRound.PlaceBet(CrapsBetType.PassOdds, chip);
-            roundTotalStaked += chip;
-            PushUndoBet(CrapsBetType.PassOdds, chip);
+            int mult = i + 1;
+            bool visible = mult <= maxMult;
+            multiplierButtons[i].gameObject.SetActive(visible);
+            if (!visible) continue;
+            long amount = baseAmount * mult;
+            int capturedMult = mult;
+            long capturedAmount = amount;
+            multiplierLabels[i].text = $"{mult}x\n{UIFactory.FormatMoney(amount)}";
+            multiplierButtons[i].onClick.RemoveAllListeners();
+            multiplierButtons[i].onClick.AddListener(() => SetOddsModalAmount(capturedAmount));
         }
-        else if (currentRound.Phase == CrapsPhase.Point && currentRound.GetBet(CrapsBetType.DontPass) > 0 && currentRound.GetBet(CrapsBetType.DontPassOdds) == 0)
+
+        RefreshOddsModalPreview();
+        RefreshOddsModalButtonHighlights();
+
+        oddsModalRoot.transform.SetAsLastSibling();
+        oddsModalRoot.SetActive(true);
+    }
+
+    void SetOddsModalAmount(long amount)
+    {
+        oddsModalPendingAmount = amount;
+        RefreshOddsModalPreview();
+        RefreshOddsModalButtonHighlights();
+    }
+
+    void RefreshOddsModalButtonHighlights()
+    {
+        for (int i = 0; i < 5; i++)
         {
-            long cap = currentRound.GetBet(CrapsBetType.DontPass) * 3;
-            if (chip > cap) { statusText.text = "Odds capped at 3x your line bet"; FlashBlocked(); return; }
-            if (!bankroll.TryWithdraw(chip)) { FlashBlocked(); return; }
-            currentRound.PlaceBet(CrapsBetType.DontPassOdds, chip);
-            roundTotalStaked += chip;
-            PushUndoBet(CrapsBetType.DontPassOdds, chip);
+            if (!multiplierButtons[i].gameObject.activeSelf) continue;
+            long amount = oddsModalBaseAmount * (i + 1);
+            bool selected = amount == oddsModalPendingAmount;
+            multiplierButtons[i].GetComponent<Image>().color = selected ? UIFactory.Accent : UIFactory.AccentDim;
+            // Dark text on the bright amber selected state; light text on the dim unselected state.
+            multiplierLabels[i].color = selected ? new Color(0.08f, 0.06f, 0f) : UIFactory.TextLight;
         }
-        else
+    }
+
+    void RefreshOddsModalPreview()
+    {
+        var (num, den) = CrapsResolver.TrueOdds(oddsModalPoint);
+        string ratioText = oddsModalIsDontSide ? $"Lay odds {den}:{num}" : $"True odds {num}:{den}";
+        long payout = oddsModalIsDontSide
+            ? CrapsResolver.LayOddsPayout(oddsModalPendingAmount, oddsModalPoint)
+            : CrapsResolver.OddsPayout(oddsModalPendingAmount, oddsModalPoint);
+        long profit = payout - oddsModalPendingAmount;
+
+        oddsModalOddsText.text = $"Point is {oddsModalPoint}  —  {ratioText}\n" +
+            (oddsModalPendingAmount > 0
+                ? $"Win {UIFactory.FormatMoney(profit)} on top of your stake back"
+                : "Add chips below to build your odds stake");
+        oddsModalAmountText.text = $"Stake: {UIFactory.FormatMoney(oddsModalPendingAmount)}";
+        oddsModalAmountText.color = oddsModalPendingAmount > 0 ? UIFactory.TextLight : UIFactory.TextDim;
+    }
+
+    void OnOddsModalConfirm()
+    {
+        long amount = oddsModalPendingAmount;
+        if (amount <= 0) { HideOddsModal(); return; }
+        if (!bankroll.TryWithdraw(amount)) { FlashBlocked(); HideOddsModal(); return; }
+
+        if (oddsModalComeWager != null)
         {
-            var comeTarget = currentRound.ComeWagers.LastOrDefault(w => w.Point != null && w.OddsAmount == 0);
-            if (comeTarget == null)
-            {
-                statusText.text = "No odds-eligible bet right now";
-                FlashBlocked();
-                return;
-            }
-            long cap = comeTarget.Amount * 3;
-            if (chip > cap) { statusText.text = "Odds capped at 3x that bet"; FlashBlocked(); return; }
-            if (!bankroll.TryWithdraw(chip)) { FlashBlocked(); return; }
-            currentRound.AddComeOdds(comeTarget, chip);
-            roundTotalStaked += chip;
+            currentRound.AddComeOdds(oddsModalComeWager, amount);
             // Not pushed to the undo stack — laid/taken odds behind a Come bet are a
             // contract bet like the base wager itself, same as Pass/Don't Pass Odds
             // being undoable only because we track them by flat bet type, not by a
             // per-wager amount ComeWager doesn't expose a way to subtract from.
         }
+        else if (oddsModalBetType.HasValue)
+        {
+            currentRound.PlaceBet(oddsModalBetType.Value, amount);
+            PushUndoBet(oddsModalBetType.Value, amount);
+        }
+        roundTotalStaked += amount;
+
         soundManager?.PlayChip();
+        HideOddsModal();
         RefreshBetDisplay();
         RefreshActionButtons();
     }
+
+    void HideOddsModal() => oddsModalRoot.SetActive(false);
 
     void OnClearBetClicked()
     {
@@ -663,14 +776,12 @@ public class CrapsBettingUIController : MonoBehaviour
             long b = currentRound.GetBet(t);
             if (b > 0) { currentRound.PlaceBet(t, -b); refunded += b; }
         }
-        // Pass Line/Don't Pass are contract bets once a point is established — only
+        // Pass Line is a contract bet once a point is established — only
         // clearable while still in the come-out phase, same real-table rule.
         if (currentRound.Phase == CrapsPhase.ComeOut)
         {
             long pass = currentRound.GetBet(CrapsBetType.PassLine);
             if (pass > 0) { currentRound.PlaceBet(CrapsBetType.PassLine, -pass); refunded += pass; }
-            long dont = currentRound.GetBet(CrapsBetType.DontPass);
-            if (dont > 0) { currentRound.PlaceBet(CrapsBetType.DontPass, -dont); refunded += dont; }
         }
 
         if (refunded <= 0)
@@ -689,35 +800,39 @@ public class CrapsBettingUIController : MonoBehaviour
 
     void OnRepeatBetClicked()
     {
-        if (currentRound.Phase != CrapsPhase.ComeOut)
+        bool didAnything = false;
+
+        // Line bet — come-out only, skip if already placed.
+        if (currentRound.Phase == CrapsPhase.ComeOut && lastLineAmount > 0
+            && currentRound.GetBet(CrapsBetType.PassLine) == 0)
         {
-            statusText.text = "Can't repeat mid-point";
+            if (bankroll.TryWithdraw(lastLineAmount))
+            {
+                currentRound.PlaceBet(CrapsBetType.PassLine, lastLineAmount);
+                roundTotalStaked += lastLineAmount;
+                PushUndoBet(CrapsBetType.PassLine, lastLineAmount);
+                didAnything = true;
+            }
+        }
+
+        // One-roll bets — re-place any that aren't already staked.
+        foreach (var kv in lastOneRollBets)
+        {
+            if (currentRound.GetBet(kv.Key) > 0) continue;
+            if (!bankroll.TryWithdraw(kv.Value)) continue;
+            currentRound.PlaceBet(kv.Key, kv.Value);
+            roundTotalStaked += kv.Value;
+            PushUndoBet(kv.Key, kv.Value);
+            didAnything = true;
+        }
+
+        if (!didAnything)
+        {
+            statusText.text = "Nothing to repeat";
             FlashBlocked();
             return;
         }
-        if (lastLineAmount <= 0)
-        {
-            statusText.text = "No previous line bet to repeat";
-            FlashBlocked();
-            return;
-        }
-        if (currentRound.GetBet(CrapsBetType.PassLine) > 0 || currentRound.GetBet(CrapsBetType.DontPass) > 0)
-        {
-            statusText.text = "Line bet already placed";
-            FlashBlocked();
-            return;
-        }
-        if (!bankroll.TryWithdraw(lastLineAmount))
-        {
-            statusText.text = "Not enough balance to repeat that bet";
-            FlashBlocked();
-            return;
-        }
-        var type = lastLineWasDontPass ? CrapsBetType.DontPass : CrapsBetType.PassLine;
-        currentRound.PlaceBet(type, lastLineAmount);
-        roundTotalStaked += lastLineAmount;
         soundManager?.PlayChip();
-        PushUndoBet(type, lastLineAmount);
         RefreshBetDisplay();
         RefreshActionButtons();
     }
@@ -739,7 +854,7 @@ public class CrapsBettingUIController : MonoBehaviour
     // ---- Rolling ----
 
     // Real bubble-craps machines let you roll with only Place/Field/Hardway bets
-    // down — a Pass/Don't Pass bet is not required, matching that reference.
+    // down — a Pass Line bet is not required, matching that reference.
     void OnRollClicked()
     {
         if (rolling) return;
@@ -764,7 +879,7 @@ public class CrapsBettingUIController : MonoBehaviour
         RefreshActionButtons();
 
         long passBefore = currentRound.GetBet(CrapsBetType.PassLine);
-        long dontBefore = currentRound.GetBet(CrapsBetType.DontPass);
+        long passOddsBefore = currentRound.GetBet(CrapsBetType.PassOdds);
         int pointBefore = currentRound.Point ?? 0;
         // Place/Hardway/Come bets clear to zero on a seven-out with no payout field
         // of their own (a 7 never matches any of their numbers) — captured before
@@ -772,7 +887,27 @@ public class CrapsBettingUIController : MonoBehaviour
         // history row instead of it silently vanishing (the bankroll itself already
         // reflects it correctly from the original stake withdrawal; this is only
         // about which row gets credited with the loss the player actually felt).
-        long activeBetsBefore = SumActiveClearableBets();
+        long placesBefore = 0;
+        foreach (var n in PlaceNumbers) placesBefore += currentRound.GetBet(PlaceTypeFor(n));
+        long activeBetsBefore = SumActiveClearableBets(); // Place + Hardway + Come wagers
+        long nonPlaceActiveBefore = activeBetsBefore - placesBefore; // Hardway + Come wagers
+        long oneRollStakesBefore = SumOneRollBets();
+        bool placesWorkingBefore = currentRound.PlaceBetsWorking;
+        // Per-hardway snapshot so ApplyRollResult can detect easy-way losses
+        // (a Hardway cleared by its number hitting non-hard — not a 7, not a win).
+        var hardBefore = new long[HardNumbers.Length];
+        for (int i = 0; i < HardNumbers.Length; i++)
+            hardBefore[i] = currentRound.GetBet(HardTypeFor(HardNumbers[i]));
+
+        // Save per-bet amounts so REPEAT BET can re-place them next roll.
+        lastOneRollBets.Clear();
+        foreach (var t in PropTypes)
+        {
+            long b = currentRound.GetBet(t);
+            if (b > 0) lastOneRollBets[t] = b;
+        }
+        long fieldBetNow = currentRound.GetBet(CrapsBetType.Field);
+        if (fieldBetNow > 0) lastOneRollBets[CrapsBetType.Field] = fieldBetNow;
 
         var result = currentRound.Roll();
         rollCount++;
@@ -783,7 +918,7 @@ public class CrapsBettingUIController : MonoBehaviour
         // out), so wait on the dice actually reporting settled rather than a timer.
         yield return new WaitUntil(() => die1UI.Settled && die2UI.Settled);
 
-        ApplyRollResult(result, passBefore, dontBefore, pointBefore, activeBetsBefore);
+        ApplyRollResult(result, passBefore, passOddsBefore, pointBefore, placesBefore, activeBetsBefore, nonPlaceActiveBefore, placesWorkingBefore, oneRollStakesBefore, hardBefore);
 
         rolling = false;
         RefreshActionButtons();
@@ -798,14 +933,49 @@ public class CrapsBettingUIController : MonoBehaviour
         return sum;
     }
 
-    void ApplyRollResult(CrapsRollResult result, long passBefore, long dontBefore, int pointBefore, long activeBetsBefore)
+    // One-roll bets (Field + props) are ALWAYS consumed on the roll they're live for,
+    // win or lose. Unlike Place/Hardway bets that persist until a hit or 7-out,
+    // these stakes need to appear as a loss in the roll's history row whenever they
+    // don't pay — otherwise losing prop rolls show as +0 with money silently gone.
+    long SumOneRollBets()
+    {
+        return currentRound.GetBet(CrapsBetType.Field)
+            + currentRound.GetBet(CrapsBetType.AnyCraps)
+            + currentRound.GetBet(CrapsBetType.AnySeven)
+            + currentRound.GetBet(CrapsBetType.AnyEleven)
+            + currentRound.GetBet(CrapsBetType.Horn);
+    }
+
+    void ApplyRollResult(CrapsRollResult result, long passBefore, long passOddsBefore, int pointBefore, long placesBefore, long activeBetsBefore, long nonPlaceActiveBefore, bool placesWorkingBefore, long oneRollStakesBefore, long[] hardBefore)
     {
         long totalReturned = result.TotalReturned;
-        // Only meaningful on an actual seven-out — a 7 can never hit any Place,
-        // Hardway, or Come number, so this is exactly the standing money that just
-        // got wiped with no payout of its own, and never double-counts a roll that
-        // also paid something else (Field/props/Pass line resolve independently).
-        long lostOnSevenOut = result.RoundOver ? activeBetsBefore : 0;
+        // On seven-out: Hardway/Come wagers always lose; PassLine/PassOdds always lose.
+        // Place bets only lose if they were WORKING (BETS ON) — BETS OFF protects them
+        // even on a seven-out (dealer returns the chips marked "off").
+        long lostOnSevenOut = result.RoundOver
+            ? (placesWorkingBefore ? placesBefore : 0) + nonPlaceActiveBefore + passBefore + passOddsBefore
+            : 0;
+        // Come-out 7: Hardways always lose (no phase protection). Place bets lose only
+        // if BETS ON. Use placesWorkingBefore — the auto-transitions in Roll() may have
+        // already changed PlaceBetsWorking by the time we read it here.
+        long lostOnComeOutSeven = !result.RoundOver && result.Total == 7 && pointBefore == 0
+            ? nonPlaceActiveBefore + (placesWorkingBefore ? placesBefore : 0)
+            : 0;
+        // Easy-way loss: a Hardway clears when its number hits non-hard (e.g. Hard8
+        // loses on 5+3=8). Not a 7, so none of the above trackers cover it. Detect by
+        // comparing per-hardway snapshots: any Hardway that was > 0 before, is now 0,
+        // and didn't appear in HardwayHits (no win) = silently cleared for no return.
+        long lostOnEasyWay = 0;
+        if (!result.RoundOver && result.Total != 7)
+        {
+            for (int i = 0; i < HardNumbers.Length; i++)
+            {
+                if (hardBefore[i] > 0
+                    && currentRound.GetBet(HardTypeFor(HardNumbers[i])) == 0
+                    && !result.HardwayHits.ContainsKey(HardNumbers[i]))
+                    lostOnEasyWay += hardBefore[i];
+            }
+        }
         if (totalReturned > 0) bankroll.Deposit(totalReturned);
         roundTotalReturned += totalReturned;
 
@@ -820,9 +990,14 @@ public class CrapsBettingUIController : MonoBehaviour
         // the two fields are repurposed for a per-roll row rather than a per-turn
         // summary, but the UI only ever reads NetChange/TotalStaked/BalanceAfter,
         // so nothing downstream needs to change.
+        // One-roll stakes (Field, props) are always consumed this roll. Subtract them
+        // from the net so a losing prop roll shows -25 instead of silently +0.
+        // Winning props already come back in totalReturned, so the net is correct:
+        //   lose: 0 return - 25 stake = -25
+        //   win:  50 return - 25 stake = +25
         int pointAfterRoll = currentRound.Point ?? 0;
         var rollRecord = new CrapsRoundRecord(rollLogIndex++, pointAfterRoll, rollCount,
-            roundTotalStaked, roundTotalStaked + totalReturned - lostOnSevenOut, bankroll.Balance, result.Total);
+            roundTotalStaked, roundTotalStaked + totalReturned - lostOnSevenOut - lostOnComeOutSeven - lostOnEasyWay - oneRollStakesBefore, bankroll.Balance, result.Total);
         onRollLogged?.Invoke(rollRecord);
 
         // Per-roll history — every reference app's roll strip shows the actual
@@ -835,11 +1010,8 @@ public class CrapsBettingUIController : MonoBehaviour
             : new Color(0.3f, 0.55f, 0.95f);
         onRollResolved?.Invoke(result.Total.ToString(), rollColor);
 
-        if (result.PassResolved || result.DontPassResolved)
-        {
-            if (passBefore > 0) { lastLineAmount = passBefore; lastLineWasDontPass = false; }
-            else if (dontBefore > 0) { lastLineAmount = dontBefore; lastLineWasDontPass = true; }
-        }
+        if (result.PassResolved && passBefore > 0)
+            lastLineAmount = passBefore;
 
         var parts = new List<string> { $"Rolled {result.Die1}+{result.Die2} = {result.Total}" };
         if (result.PointEstablishedThisRoll) parts.Add($"Point is {result.NewPoint}");
@@ -889,13 +1061,44 @@ public class CrapsBettingUIController : MonoBehaviour
 
         if (result.RoundOver)
         {
+            // Carry BETS OFF Place bets to the new round — dealer marks chips "off",
+            // seven-out doesn't take them, they stay on the layout for the next shooter.
+            var carriedPlaceBets = new Dictionary<CrapsBetType, long>();
+            if (!placesWorkingBefore)
+            {
+                foreach (var n in PlaceNumbers)
+                {
+                    long amt = currentRound.GetBet(PlaceTypeFor(n));
+                    if (amt > 0) carriedPlaceBets[PlaceTypeFor(n)] = amt;
+                }
+            }
             var record = new CrapsRoundRecord(roundIndex, pointBefore, rollCount, roundTotalStaked, roundTotalReturned, bankroll.Balance);
             onRoundResolved?.Invoke(record);
             roundIndex++;
             currentRound = new CrapsRound(rng);
+            foreach (var kv in carriedPlaceBets) currentRound.PlaceBet(kv.Key, kv.Value);
             roundTotalStaked = 0;
             roundTotalReturned = 0;
             rollCount = 0;
+        }
+
+        // Auto-open odds modal when a new odds opportunity is created this roll.
+        // Pass Line gets its chance when a point is established on come-out;
+        // Come wagers get theirs the roll they park at their own point.
+        if (!result.RoundOver)
+        {
+            if (result.PointEstablishedThisRoll)
+            {
+                int pt = result.NewPoint.Value;
+                long passBase = currentRound.GetBet(CrapsBetType.PassLine);
+                if (passBase > 0)
+                    OpenOddsModal(CrapsBetType.PassOdds, null, "PASS LINE ODDS", pt, passBase, isDontSide: false);
+            }
+            else if (result.ComeParked.Count > 0)
+            {
+                var w = result.ComeParked[0];
+                OpenOddsModal(null, w, $"COME {w.Point} ODDS", w.Point.Value, w.Amount, isDontSide: false);
+            }
         }
 
         RefreshBetDisplay();
@@ -911,30 +1114,19 @@ public class CrapsBettingUIController : MonoBehaviour
         // needs to reflect that right away too, not just after a roll resolves.
         onBankrollChanged?.Invoke();
 
-        SetBarAmount(passSpot, currentRound.GetBet(CrapsBetType.PassLine), "PASS LINE");
-        SetBarAmount(dontPassSpot, currentRound.GetBet(CrapsBetType.DontPass), "DON'T PASS");
+        SetBarAmountWithOdds(passSpot, currentRound.GetBet(CrapsBetType.PassLine), currentRound.GetBet(CrapsBetType.PassOdds), "PASS LINE");
         SetBarAmount(fieldSpot, currentRound.GetBet(CrapsBetType.Field), "FIELD");
 
-        long comeTotal = currentRound.ComeWagers.Where(w => !w.IsDontCome).Sum(w => w.Amount + w.OddsAmount);
-        int comeCount = currentRound.ComeWagers.Count(w => !w.IsDontCome);
+        long comeTotal = currentRound.ComeWagers.Sum(w => w.Amount + w.OddsAmount);
+        int comeCount = currentRound.ComeWagers.Count;
         comeSpot.AmountText.text = comeTotal > 0 ? $"COME ({comeCount})\n{UIFactory.FormatMoney(comeTotal)}" : "COME";
         comeSpot.AmountText.color = comeTotal > 0 ? UIFactory.TextLight : UIFactory.TextDim;
         RebuildChipVisuals(comeSpot.Root.transform, comeSpot.ChipVisuals, comeTotal, comeSpot.AmountText.transform);
-
-        long dontComeTotal = currentRound.ComeWagers.Where(w => w.IsDontCome).Sum(w => w.Amount + w.OddsAmount);
-        int dontComeCount = currentRound.ComeWagers.Count(w => w.IsDontCome);
-        dontComeSpot.AmountText.text = dontComeTotal > 0 ? $"DON'T COME ({dontComeCount})\n{UIFactory.FormatMoney(dontComeTotal)}" : "DON'T COME";
-        dontComeSpot.AmountText.color = dontComeTotal > 0 ? UIFactory.TextLight : UIFactory.TextDim;
-        RebuildChipVisuals(dontComeSpot.Root.transform, dontComeSpot.ChipVisuals, dontComeTotal, dontComeSpot.AmountText.transform);
 
         foreach (var kv in placeSpots) SetNumberSpot(kv.Value, currentRound.GetBet(PlaceTypeFor(kv.Key)));
         foreach (var kv in hardSpots) SetBarAmount(kv.Value, currentRound.GetBet(HardTypeFor(kv.Key)), $"HARD {kv.Key}");
         foreach (var kv in propSpots) SetBarAmount(kv.Value, currentRound.GetBet(kv.Key), PropLabel(kv.Key));
         UpdatePointHighlight();
-
-        string target = FindOddsTargetLabel();
-        oddsStatusText.text = target != null ? $"Odds available: {target}" : "No odds-eligible bet right now";
-        oddsStatusText.color = target != null ? UIFactory.Accent : UIFactory.TextDim;
     }
 
     // Bright amber ring on whichever Place spot matches the live point — the single
@@ -952,6 +1144,22 @@ public class CrapsBettingUIController : MonoBehaviour
         spot.AmountText.text = amount > 0 ? $"{idleLabel}\n{UIFactory.FormatMoney(amount)}" : idleLabel;
         spot.AmountText.color = amount > 0 ? UIFactory.TextLight : UIFactory.TextDim;
         RebuildChipVisuals(spot.Root.transform, spot.ChipVisuals, amount, spot.AmountText.transform);
+    }
+
+    // Odds were being staked (withdrawn from the bankroll, tracked in Core) but
+    // never actually shown anywhere on the Pass Line/Don't Pass bar itself — the
+    // bar's amount and chip count only ever reflected the base bet, so placing
+    // odds looked like nothing happened even though real money moved. Chip count
+    // now reflects base+odds together, and the odds portion gets its own explicit
+    // line so it's not just a bigger number with no explanation.
+    void SetBarAmountWithOdds(FlatBarSpot spot, long baseAmount, long oddsAmount, string idleLabel)
+    {
+        long total = baseAmount + oddsAmount;
+        spot.AmountText.text = total <= 0 ? idleLabel
+            : oddsAmount > 0 ? $"{idleLabel}\n{UIFactory.FormatMoney(baseAmount)} + {UIFactory.FormatMoney(oddsAmount)} odds"
+            : $"{idleLabel}\n{UIFactory.FormatMoney(baseAmount)}";
+        spot.AmountText.color = total > 0 ? UIFactory.TextLight : UIFactory.TextDim;
+        RebuildChipVisuals(spot.Root.transform, spot.ChipVisuals, total, spot.AmountText.transform);
     }
 
     void SetNumberSpot(NumberSpot spot, long amount)
@@ -1012,9 +1220,13 @@ public class CrapsBettingUIController : MonoBehaviour
 
     void RefreshActionButtons()
     {
-        bool hasLineBet = currentRound.GetBet(CrapsBetType.PassLine) > 0 || currentRound.GetBet(CrapsBetType.DontPass) > 0;
+        bool hasLineBet = currentRound.GetBet(CrapsBetType.PassLine) > 0;
         UIFactory.SetButtonState(rollButton, rollBaseColor, !rolling);
-        UIFactory.SetButtonState(betsToggleButton, currentRound.PlaceBetsWorking ? UIFactory.Positive : UIFactory.AccentDim, !rolling);
+        // Toggle always shows its ON/OFF color — it's a mode indicator, not just a
+        // button. Only interactivity changes during rolling, not the color.
+        betsToggleButton.interactable = !rolling;
+        betsToggleButton.GetComponent<UnityEngine.UI.Image>().color =
+            currentRound.PlaceBetsWorking ? UIFactory.Positive : UIFactory.AccentDim;
         betsToggleLabel.text = currentRound.PlaceBetsWorking ? "BETS ON" : "BETS OFF";
 
         bool hasClearable = currentRound.GetBet(CrapsBetType.Field) > 0
@@ -1024,11 +1236,12 @@ public class CrapsBettingUIController : MonoBehaviour
             || (currentRound.Phase == CrapsPhase.ComeOut && hasLineBet);
         UIFactory.SetButtonState(clearBetButton, clearBaseColor, !rolling && hasClearable);
 
-        bool canRepeat = !rolling && currentRound.Phase == CrapsPhase.ComeOut && lastLineAmount > 0 && !hasLineBet;
+        bool canRepeatLine = currentRound.Phase == CrapsPhase.ComeOut && lastLineAmount > 0 && !hasLineBet;
+        bool canRepeatOneRoll = lastOneRollBets.Count > 0 && lastOneRollBets.Any(kv => currentRound.GetBet(kv.Key) == 0);
+        bool canRepeat = !rolling && (canRepeatLine || canRepeatOneRoll);
         UIFactory.SetButtonState(repeatButton, repeatBaseColor, canRepeat);
 
         UIFactory.SetButtonState(undoButton, UIFactory.AccentDim, !rolling && undoStack.Count > 0);
-        UIFactory.SetButtonState(oddsButton, UIFactory.AccentDim, !rolling && FindOddsTargetLabel() != null);
     }
 
     public void SetRoundIndex(int index) => roundIndex = index;
@@ -1041,10 +1254,11 @@ public class CrapsBettingUIController : MonoBehaviour
         rollCount = 0;
         winStreak = 0;
         lastLineAmount = 0;
+        lastOneRollBets.Clear();
         undoStack.Clear();
         streakBadgeGO.SetActive(false);
         statusText.color = UIFactory.Accent;
-        statusText.text = "Come out — place Pass or Don't Pass, then ROLL";
+        statusText.text = "Come out — place Pass Line, then ROLL";
         die1UI.SetFaceUp(1);
         die2UI.SetFaceUp(1);
         RefreshBetDisplay();

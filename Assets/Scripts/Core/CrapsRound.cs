@@ -47,9 +47,9 @@ public class CrapsRound
 
     public void ClearBet(CrapsBetType type) => bets[type] = 0;
 
-    public ComeWager PlaceComeBet(bool isDontCome, long amount)
+    public ComeWager PlaceComeBet(long amount)
     {
-        var wager = new ComeWager(isDontCome, amount);
+        var wager = new ComeWager(amount);
         comeWagers.Add(wager);
         return wager;
     }
@@ -94,21 +94,28 @@ public class CrapsRound
         };
         int total = result.Total;
 
-        // 1. Field — one-roll bet, resolves every roll regardless of phase.
+        // 1. Field — one-roll bet, resolves every roll regardless of phase, then
+        // clears either way (win or lose) — it was never being cleared at all, so
+        // the same stake kept re-resolving roll after roll instead of being a
+        // single-roll bet, silently paying out (or losing) indefinitely until a
+        // seven-out happened to wipe it via an unrelated code path.
         long fieldBet = GetBet(CrapsBetType.Field);
         if (fieldBet > 0)
+        {
             result.FieldReturn = CrapsResolver.FieldPayout(fieldBet, total);
+            bets[CrapsBetType.Field] = 0;
+        }
 
         // 1b. One-roll proposition bets — Any Craps/Any Seven/Eleven/Horn, resolve
-        // every roll regardless of phase, same as Field.
+        // every roll regardless of phase, same as Field, and clear the same way.
         long anyCrapsBet = GetBet(CrapsBetType.AnyCraps);
-        if (anyCrapsBet > 0) result.AnyCrapsReturn = CrapsResolver.AnyCrapsPayout(anyCrapsBet, total);
+        if (anyCrapsBet > 0) { result.AnyCrapsReturn = CrapsResolver.AnyCrapsPayout(anyCrapsBet, total); bets[CrapsBetType.AnyCraps] = 0; }
         long anySevenBet = GetBet(CrapsBetType.AnySeven);
-        if (anySevenBet > 0) result.AnySevenReturn = CrapsResolver.AnySevenPayout(anySevenBet, total);
+        if (anySevenBet > 0) { result.AnySevenReturn = CrapsResolver.AnySevenPayout(anySevenBet, total); bets[CrapsBetType.AnySeven] = 0; }
         long anyElevenBet = GetBet(CrapsBetType.AnyEleven);
-        if (anyElevenBet > 0) result.AnyElevenReturn = CrapsResolver.AnyElevenPayout(anyElevenBet, total);
+        if (anyElevenBet > 0) { result.AnyElevenReturn = CrapsResolver.AnyElevenPayout(anyElevenBet, total); bets[CrapsBetType.AnyEleven] = 0; }
         long hornBet = GetBet(CrapsBetType.Horn);
-        if (hornBet > 0) result.HornReturn = CrapsResolver.HornPayout(hornBet, total);
+        if (hornBet > 0) { result.HornReturn = CrapsResolver.HornPayout(hornBet, total); bets[CrapsBetType.Horn] = 0; }
 
         // 2. Hardways — always working (both phases), lose on ANY 7.
         foreach (var t in HardTypes)
@@ -128,16 +135,15 @@ public class CrapsRound
             }
         }
 
-        // 3 & 4. Come / Don't Come — traveling wagers resolve/park on their
-        // establishing roll; already-parked wagers resolve on a repeat or a 7.
+        // 3. Come bets — traveling wagers establish their own point on the next roll;
+        // already-parked wagers win on a repeat or lose on a 7.
         foreach (var w in comeWagers.ToList())
         {
             if (w.Point == null)
             {
                 if (total == 7)
                 {
-                    long ret = w.IsDontCome ? 0 : w.Amount * 2;
-                    if (ret > 0) result.ComeReturns[w] = ret;
+                    result.ComeReturns[w] = w.Amount * 2; // Come wins on come-out 7
                     comeWagers.Remove(w);
                 }
                 else
@@ -148,29 +154,25 @@ public class CrapsRound
             }
             else if (total == w.Point)
             {
-                long ret = w.IsDontCome ? 0
-                    : w.Amount * 2 + (w.OddsAmount > 0 ? CrapsResolver.OddsPayout(w.OddsAmount, w.Point.Value) : 0);
-                if (ret > 0) result.ComeReturns[w] = ret;
+                long ret = w.Amount * 2 + (w.OddsAmount > 0 ? CrapsResolver.OddsPayout(w.OddsAmount, w.Point.Value) : 0);
+                result.ComeReturns[w] = ret;
                 comeWagers.Remove(w);
             }
             else if (total == 7)
             {
-                long ret = w.IsDontCome
-                    ? w.Amount * 2 + (w.OddsAmount > 0 ? CrapsResolver.LayOddsPayout(w.OddsAmount, w.Point.Value) : 0)
-                    : 0;
-                if (ret > 0) result.ComeReturns[w] = ret;
+                // Come bet parked at a point loses on seven-out — no return.
                 comeWagers.Remove(w);
             }
         }
 
-        // 5. Place bets — "working" during the point phase, or anytime the player
-        // has forced bets on via PlaceBetsWorking (real bubble-craps machines offer
-        // this "BETS ON/OFF" toggle instead of the standard off-on-come-out rule).
-        // Repeat hits keep paying without clearing the bet. Only cleared by a real
-        // seven-out (Phase == Point when the 7 lands) — a come-out 7 with bets
-        // forced on must NOT clear them, it's not a seven-out, the shooter's turn
-        // isn't over.
-        if (Phase == CrapsPhase.Point || PlaceBetsWorking)
+        // 5. Place bets — controlled entirely by PlaceBetsWorking (the BETS ON/OFF
+        // toggle). When OFF, bets are dormant: a 7 does NOT clear them and a matching
+        // number does NOT pay — the dealer physically marks them "off" and they sit
+        // untouched until the player calls them back on. When ON, the dice result
+        // applies normally (7 clears them, matching number pays). Auto-transitions
+        // keep the default behavior correct: OFF on come-out, auto-ON when a point
+        // is established, auto-OFF when a point is made (returning to come-out).
+        if (PlaceBetsWorking)
         {
             foreach (var t in PlaceTypes)
             {
@@ -178,28 +180,21 @@ public class CrapsRound
                 if (stake <= 0) continue;
                 int num = PlaceNumber(t);
                 if (total == 7)
-                {
-                    if (Phase == CrapsPhase.Point) bets[t] = 0;
-                }
+                    bets[t] = 0;
                 else if (total == num)
-                {
                     result.PlaceHits[num] = CrapsResolver.PlacePayout(stake, num);
-                }
             }
         }
 
-        // 6. The main line.
+        // 6. The main line. Crapless craps has no Don't Pass.
         if (Phase == CrapsPhase.ComeOut)
         {
             if (total == 7)
             {
                 long passBet = GetBet(CrapsBetType.PassLine);
-                long dontBet = GetBet(CrapsBetType.DontPass);
                 result.PassReturn = passBet > 0 ? passBet * 2 : 0;
                 result.PassResolved = passBet > 0;
-                result.DontPassResolved = dontBet > 0;
                 bets[CrapsBetType.PassLine] = 0;
-                bets[CrapsBetType.DontPass] = 0;
                 // Phase stays ComeOut, Point stays null — shooter keeps rolling.
             }
             else
@@ -216,20 +211,15 @@ public class CrapsRound
             {
                 long passBet = GetBet(CrapsBetType.PassLine);
                 long passOdds = GetBet(CrapsBetType.PassOdds);
-                long dontBet = GetBet(CrapsBetType.DontPass);
-                long dontOdds = GetBet(CrapsBetType.DontPassOdds);
 
                 long passRet = 0;
                 if (passBet > 0) passRet += passBet * 2;
                 if (passOdds > 0) passRet += CrapsResolver.OddsPayout(passOdds, Point.Value);
                 result.PassReturn = passRet;
                 result.PassResolved = passBet > 0 || passOdds > 0;
-                result.DontPassResolved = dontBet > 0 || dontOdds > 0;
 
                 bets[CrapsBetType.PassLine] = 0;
                 bets[CrapsBetType.PassOdds] = 0;
-                bets[CrapsBetType.DontPass] = 0;
-                bets[CrapsBetType.DontPassOdds] = 0;
                 Phase = CrapsPhase.ComeOut;
                 Point = null;
             }
@@ -237,21 +227,11 @@ public class CrapsRound
             {
                 long passBet = GetBet(CrapsBetType.PassLine);
                 long passOdds = GetBet(CrapsBetType.PassOdds);
-                long dontBet = GetBet(CrapsBetType.DontPass);
-                long dontOdds = GetBet(CrapsBetType.DontPassOdds);
 
                 result.PassResolved = passBet > 0 || passOdds > 0;
 
-                long dontRet = 0;
-                if (dontBet > 0) dontRet += dontBet * 2;
-                if (dontOdds > 0) dontRet += CrapsResolver.LayOddsPayout(dontOdds, Point.Value);
-                result.DontPassReturn = dontRet;
-                result.DontPassResolved = dontBet > 0 || dontOdds > 0;
-
                 bets[CrapsBetType.PassLine] = 0;
                 bets[CrapsBetType.PassOdds] = 0;
-                bets[CrapsBetType.DontPass] = 0;
-                bets[CrapsBetType.DontPassOdds] = 0;
                 Phase = CrapsPhase.ComeOut;
                 Point = null;
                 result.RoundOver = true;

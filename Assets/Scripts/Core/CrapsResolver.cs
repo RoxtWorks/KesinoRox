@@ -21,13 +21,15 @@ public static class CrapsResolver
     // House-adjusted place-bet odds (not true odds) — standard 9:5/7:5/7:6 on
     // 4-10/5-9/6-8, plus the crapless-specific 11:2/11:4 on 2-12/3-11 (those two
     // numbers only exist as place bets because crapless makes them valid points).
+    // Returns WINNINGS ONLY (not stake+winnings): Place bets stay on the table after
+    // a hit and are only cleared on a seven-out, so the stake is NOT returned here.
     public static long PlacePayout(long stake, int number) => number switch
     {
-        4 or 10 => stake + stake * 9 / 5,
-        5 or 9 => stake + stake * 7 / 5,
-        6 or 8 => stake + stake * 7 / 6,
-        2 or 12 => stake + stake * 11 / 2,
-        3 or 11 => stake + stake * 11 / 4,
+        4 or 10 => stake * 9 / 5,
+        5 or 9 => stake * 7 / 5,
+        6 or 8 => stake * 7 / 6,
+        2 or 12 => stake * 11 / 2,
+        3 or 11 => stake * 11 / 4,
         _ => 0
     };
 
@@ -50,6 +52,25 @@ public static class CrapsResolver
         5 or 9 => (3, 2),
         6 or 8 => (6, 5),
         _ => (0, 1)
+    };
+
+    // Max odds allowed behind the line, as a multiplier of the base bet — the real
+    // "3-4-5x odds" convention most US casinos use for standard craps: the
+    // multiplier is chosen per point so the max total payout works out to roughly
+    // the same 6x the line bet regardless of which point it is (mult * trueOdds
+    // ≈ 6 for every point). Crapless craps adds four point numbers standard craps
+    // never has (2, 3, 11, 12) with no single settled real-world convention for
+    // them, so this extends that exact same "constant ~6x max payout" formula to
+    // them instead of guessing — 1x on 2/12, 2x on 3/11, matching what a real
+    // casino's own logic would produce if it had those numbers as points.
+    public static int MaxOddsMultiplier(int point) => point switch
+    {
+        2 or 12 => 1,
+        3 or 11 => 2,
+        4 or 10 => 3,
+        5 or 9 => 4,
+        6 or 8 => 5,
+        _ => 0
     };
 
     public static long OddsPayout(long oddsStake, int number)

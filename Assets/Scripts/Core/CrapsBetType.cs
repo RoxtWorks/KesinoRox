@@ -1,12 +1,12 @@
-// Every flat, single-slot craps bet — one dictionary entry each. Come/Don't Come
-// bets are NOT here since several can be active at once, each parked at its own
-// point; those live in a List<ComeWager> instead (see ComeWager.cs).
+// Every flat, single-slot craps bet — one dictionary entry each. Come bets are
+// NOT here since several can be active at once, each parked at its own point;
+// those live in a List<ComeWager> instead (see ComeWager.cs).
+// Crapless craps: Don't Pass and Don't Come are not offered — every non-7 total
+// is a valid point, which makes the don't-side math untenable.
 public enum CrapsBetType
 {
     PassLine,
-    DontPass,
     PassOdds,
-    DontPassOdds,
     Field,
     Place2,
     Place3,

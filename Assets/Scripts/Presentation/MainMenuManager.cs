@@ -15,6 +15,26 @@ public class MainMenuManager : MonoBehaviour
     static readonly Color TextDim = new Color(0.72f, 0.7f, 0.66f);
 
     TMP_FontAsset pixelFont;
+    RulesPopupUI creditsPanel;
+
+    // Credits text — only lists assets actually used at runtime (checked against
+    // real script references, not just what's sitting in the project), and only
+    // names a creator/license where it's verified from a bundled readme/license
+    // file or, for the music, directly from the user.
+    const string CreditsText =
+        "<b>MUSIC</b>\n" +
+        "\"26 5am - Goodbye\" — Towball's Crossing\n" +
+        "towball.itch.io/towballs-crossing\n\n" +
+        "<b>SOUND EFFECTS</b>\n" +
+        "Chip, Click, Win, Lose, Reset, Add Money, Tsk\n\n" +
+        "<b>FONTS</b>\n" +
+        "BoldPixels\n\n" +
+        "<b>UI / VISUALS</b>\n" +
+        "Fantasy UI Borders — Kenney (kenney.nl), CC0\n\n" +
+        "<b>PLUGINS</b>\n" +
+        "DOTween / DOTween Pro — Demigiant\n" +
+        "Text Animator — Febucci\n" +
+        "Transitions Plus — Kronnect";
 
     void Start()
     {
@@ -62,6 +82,11 @@ public class MainMenuManager : MonoBehaviour
 #endif
             }, 13, pixelFont: true);
         UIFactory.MakeMuteButton(canvasGO.transform, new Vector2(880, 470));
+        UIFactory.MakeButton(canvasGO.transform, "CreditsBtn", new Vector2(880, 425), new Vector2(140, 32),
+            "CREDITS", UIFactory.AccentDim, () => creditsPanel.Show(), 13, pixelFont: true);
+
+        creditsPanel = gameObject.AddComponent<RulesPopupUI>();
+        creditsPanel.Build(canvasGO.transform, "CREDITS", CreditsText);
 
         var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 230), 96,
             new Vector2(1100, 160), ThemeAccent, FontStyles.Bold);

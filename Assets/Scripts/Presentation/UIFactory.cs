@@ -273,6 +273,11 @@ public static class UIFactory
         btn.colors = colors;
         if (onClick != null) btn.onClick.AddListener(onClick);
 
+        // Bright-background buttons (e.g. Positive green, Accent amber) need dark
+        // text to maintain contrast; dark-background buttons keep white text.
+        float lum = 0.299f * color.r + 0.587f * color.g + 0.114f * color.b;
+        Color labelColor = lum > 0.5f ? new Color(0.06f, 0.06f, 0.06f) : TextLight;
+
         if (pixelFont && PixelFont != null)
         {
             var labelGO = new GameObject("Label");
@@ -280,7 +285,7 @@ public static class UIFactory
             var tmp = labelGO.AddComponent<TextMeshProUGUI>();
             tmp.font = PixelFont;
             tmp.text = label;
-            tmp.color = TextLight;
+            tmp.color = labelColor;
             tmp.alignment = TextAlignmentOptions.Center;
             // Autosize instead of a fixed fontSize — the pixel font's glyph metrics
             // differ from the legacy font this replaced, so a fixed size risks
@@ -299,7 +304,7 @@ public static class UIFactory
             // Same margin reasoning as the pixel-font path above — full button size
             // let text sit flush against (or under) the sliced border art.
             var inset = new Vector2(Mathf.Max(size.x - 16f, 4f), Mathf.Max(size.y - 10f, 4f));
-            MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: inset, color: TextLight, style: FontStyle.Bold);
+            MakeText(go.transform, "Label", Vector2.zero, fontSize, sizeDelta: inset, color: labelColor, style: FontStyle.Bold);
             var labelText = go.GetComponentInChildren<Text>();
             labelText.text = label;
         }

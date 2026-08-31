@@ -21,15 +21,13 @@ public class CrapsRollResult
     public readonly Dictionary<int, long> PlaceHits = new Dictionary<int, long>();
     public readonly Dictionary<int, long> HardwayHits = new Dictionary<int, long>();
 
-    // Come/Don't Come wagers that resolved (won) this roll, and what they paid.
+    // Come wagers that resolved (won) this roll, and what they paid.
     public readonly Dictionary<ComeWager, long> ComeReturns = new Dictionary<ComeWager, long>();
     // Wagers that were traveling and just parked at a new point this roll (no payout).
     public readonly List<ComeWager> ComeParked = new List<ComeWager>();
 
     public bool PassResolved;
     public long PassReturn;
-    public bool DontPassResolved;
-    public long DontPassReturn;
 
     public bool PointEstablishedThisRoll;
     public int? NewPoint;
@@ -40,5 +38,5 @@ public class CrapsRollResult
     public bool RoundOver;
 
     public long TotalReturned => FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn
-        + PlaceHits.Values.Sum() + HardwayHits.Values.Sum() + ComeReturns.Values.Sum() + PassReturn + DontPassReturn;
+        + PlaceHits.Values.Sum() + HardwayHits.Values.Sum() + ComeReturns.Values.Sum() + PassReturn;
 }

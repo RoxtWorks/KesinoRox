@@ -29,16 +29,16 @@ public class CrapsResolverTests
         Assert.AreEqual(expectedReturn, CrapsResolver.FieldPayout(100, total));
     }
 
-    [TestCase(4, 280)]
-    [TestCase(10, 280)]
-    [TestCase(5, 240)]
-    [TestCase(9, 240)]
-    [TestCase(6, 216)]
-    [TestCase(8, 216)]
-    [TestCase(2, 650)]
-    [TestCase(12, 650)]
-    [TestCase(3, 375)]
-    [TestCase(11, 375)]
+    [TestCase(4, 180)]   // 9:5 on $100 — winnings only, stake stays on table
+    [TestCase(10, 180)]
+    [TestCase(5, 140)]   // 7:5
+    [TestCase(9, 140)]
+    [TestCase(6, 116)]   // 7:6 (integer: 100*7/6=116)
+    [TestCase(8, 116)]
+    [TestCase(2, 550)]   // 11:2
+    [TestCase(12, 550)]
+    [TestCase(3, 275)]   // 11:4
+    [TestCase(11, 275)]
     public void PlacePayout_MatchesHouseAdjustedOdds(int number, long expectedReturn)
     {
         Assert.AreEqual(expectedReturn, CrapsResolver.PlacePayout(100, number));
