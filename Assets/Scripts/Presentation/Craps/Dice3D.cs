@@ -1,7 +1,17 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using DG.Tweening;
 using UnityEngine;
+
+// Trajectory + natural face detected by a pre-simulation run on shadow dice.
+// RollPair consumes this to skip Phase 1 entirely — zero lag on ROLL press.
+public class PreSimResult
+{
+    public List<Vector3> Pos1, Pos2;
+    public List<Quaternion> Rot1, Rot2;
+    public int Nat1, Nat2;
+}
 
 // A real 3D die. Visually it's built the same way RouletteTableBuilder/
 // WheelSpinAnimator build the wheel, but the toss itself uses a real Rigidbody +
@@ -31,6 +41,9 @@ public class Dice3D : MonoBehaviour
     Rigidbody rb;
     Vector3 anchorLocalPosition;
     Vector3 landingLocalPosition;
+    bool domeMode;
+    float domeRollRadius;
+    float dieSize;
 
     // True once a toss has physically come to rest and the final face-up rotation
     // has finished snapping into place — CrapsBettingUIController waits on this
@@ -54,8 +67,25 @@ public class Dice3D : MonoBehaviour
         return die;
     }
 
+    // Dome variant — dice bounce inside the cylindrical glass dome. No aim
+    // direction needed; each toss launches in a random horizontal direction and
+    // the dome's own colliders keep them contained.
+    public static Dice3D CreateInDome(Transform parent, Vector3 localPosition, float rollRadius, float size = 0.95f)
+    {
+        var go = new GameObject("Die3D");
+        go.transform.SetParent(parent, false);
+        go.transform.localPosition = localPosition;
+        var die = go.AddComponent<Dice3D>();
+        die.anchorLocalPosition = localPosition;
+        die.domeMode = true;
+        die.domeRollRadius = rollRadius;
+        die.BuildSelf(size);
+        return die;
+    }
+
     void BuildSelf(float size)
     {
+        dieSize = size;
         EnsurePipTextures();
 
         // Solid core underneath the 6 pip quads — without it, the die is a hollow
@@ -85,7 +115,7 @@ public class Dice3D : MonoBehaviour
             // facing outward, away from the die's center.
             quad.transform.localRotation = Quaternion.LookRotation(-axis, axis == Vector3.up || axis == Vector3.down ? Vector3.forward : Vector3.up);
             quad.transform.localScale = Vector3.one * size;
-            Destroy(quad.GetComponent<Collider>());
+            DestroyImmediate(quad.GetComponent<Collider>());
             var mat = MatteMaterial(Color.white);
             mat.mainTexture = pipTextures[face];
             quad.GetComponent<Renderer>().material = mat;
@@ -101,10 +131,8 @@ public class Dice3D : MonoBehaviour
 
         rb = gameObject.AddComponent<Rigidbody>();
         rb.mass = 1f;
-        // Bumped up alongside the friction changes below — extra general drag so
-        // it settles promptly instead of gliding.
-        rb.linearDamping = 0.5f;
-        rb.angularDamping = 0.3f;
+        rb.linearDamping = 0.02f;
+        rb.angularDamping = 0.05f;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         rb.isKinematic = true; // released into real physics only for the duration of a toss
@@ -115,17 +143,11 @@ public class Dice3D : MonoBehaviour
         if (diceMaterial != null) return diceMaterial;
         diceMaterial = new PhysicsMaterial("Dice")
         {
-            bounciness = 0.45f,
-            // High friction, and Maximum instead of Average combine (with the
-            // floor's own high-friction material — see CrapsGameManager) — with
-            // rotation frozen (see PhysicsToss) the die can never bleed speed off
-            // by actually tumbling the way a real die does, so friction is the
-            // only thing left to stop a slide. The original 0.3/Average let it
-            // glide a long way, reading as sliding on ice.
-            dynamicFriction = 0.8f,
-            staticFriction = 0.9f,
-            frictionCombine = PhysicsMaterialCombine.Maximum,
-            bounceCombine = PhysicsMaterialCombine.Average
+            bounciness = 0.80f,
+            dynamicFriction = 0.4f,
+            staticFriction = 0.5f,
+            frictionCombine = PhysicsMaterialCombine.Average,
+            bounceCombine = PhysicsMaterialCombine.Maximum
         };
         return diceMaterial;
     }
@@ -151,126 +173,286 @@ public class Dice3D : MonoBehaviour
         transform.rotation = Quaternion.FromToRotation(entry.axis, Vector3.up);
     }
 
-    // "Custom strength" tuning for the throw — how hard it launches, how much
-    // spread each toss gets, how long real physics is allowed to keep bouncing
-    // before being forced to stop.
-    // The high friction added to stop the "sliding on ice" problem also eats
-    // momentum fast — a throw at the old speed now lands and stops short of the
-    // far wall instead of actually reaching it. Thrown harder to reliably carry
-    // it all the way there for a real visible bounce, while the friction still
-    // takes over and stops it quickly right after.
     const float LaunchSpeed = 20f;
     const float LaunchUpSpeed = 6f;
     const float LaunchAngleJitterDeg = 12f;
-    const float MaxTossDuration = 2.2f;
-    const float SettleLinearThresholdSq = 0.35f;
-    const float MinSettleCheckTime = 0.3f;
+    const float DomeLaunchUpSpeed = 4.5f;
+    const float DomeLaunchHorizontalSpeed = 0.3f;
+    const float DomeSimGravity = -5.0f; // reduced from -9.8 so arcs hang visibly longer
+    const float MaxTossDuration = 8.0f;
+    const float SettleLinearThresholdSq = 0.002f;   // ~0.045 m/s — visually motionless
+    const float SettleAngularThresholdSq = 0.002f;  // ~0.045 rad/s — visually motionless
+    const float MinSettleCheckTime = 0.8f;
+    // bounciness=0.80 causes 20+ micro-bounces below 0.1 m/s before velocity reaches
+    // the settle threshold. These play back as visible "jumps after landing." Applying
+    // extra per-frame damping only in the low-energy regime kills the micro-bounce tail
+    // without touching the big visible bounces (which are all >> 0.1 m/s).
+    const float MicroDampLinThreshSq = 0.04f;  // 0.2 m/s — catches last low-energy bounces earlier
+    const float MicroDampFactor = 0.80f;       // was 0.88 — more aggressive kill of micro-bounce tail
+    // Random spin added at launch so the die tumbles through the air naturally —
+    // physics then settles it on whatever face it lands; we remap textures at
+    // the end instead of rotating, so there's no visible snap or correction.
+    const float LaunchAngularSpeed = 3f;
 
-    // Rotation is entirely scripted, never physics-driven (see rb.constraints in
-    // PhysicsToss). A first pass let real physics rotate the die too, then hard-
-    // snapped it to the correct face once it stopped — a visible "correction"
-    // whenever physics landed it on the wrong face (constantly, since PhysX has
-    // no idea what CrapsRound.Roll() decided). Scripting the spin fixed that, but
-    // a second pass still did it as two separate phases — spin fast around a
-    // random axis, THEN ease into the target with a second Slerp — and those two
-    // phases almost always rotate around different axes, which reads as a
-    // visible "flip" at the handoff between them (e.g. looking like it landed on
-    // a 1, then flipped to a 5). The actual fix is to never have two phases: pick
-    // ONE axis (computed from start straight to the target face, via
-    // ToAngleAxis) and one continuous, decelerating rotation around only that
-    // axis for the whole toss — extra full 360s tacked onto the angle give it a
-    // wild multi-spin tumble, but a whole-number of extra turns doesn't change
-    // where it mathematically ends up, so it still lands exactly on the correct
-    // face with nothing to correct and no axis change to notice.
-    const float RotateDuration = 0.85f;
-    const int MinExtraSpins = 3;
-    const int MaxExtraSpins = 6;
+    // Runs Phase 1 (silent sim) on invisible shadow dice and stores the result.
+    // Called immediately after each roll completes so the trajectory is ready
+    // before the player presses ROLL again. Shadow dice never appear on screen —
+    // their renderers are disabled permanently in BubbleCrapsDome.
+    public static IEnumerator RunPreSim(Dice3D shadow1, Dice3D shadow2, Action<PreSimResult> onDone)
+    {
+        var prevMode = Physics.simulationMode;
+        var prevGravity = Physics.gravity;
+        Physics.simulationMode = SimulationMode.Script;
+        Physics.gravity = new Vector3(0f, DomeSimGravity, 0f);
 
+        List<Vector3> pos1 = null, pos2 = null;
+        List<Quaternion> rot1 = null, rot2 = null;
+        int b1, b2;
+        do
+        {
+            SimulateRoll(shadow1, shadow2, out pos1, out rot1, out pos2, out rot2, out b1, out b2);
+            if (!IsValidSettle(shadow1, shadow2) || b1 < 5 || b2 < 5) yield return null;
+        }
+        while (!IsValidSettle(shadow1, shadow2) || b1 < 5 || b2 < 5);
+
+        int nat1 = shadow1.DetectTopFace();
+        int nat2 = shadow2.DetectTopFace();
+        shadow1.rb.isKinematic = true;
+        shadow2.rb.isKinematic = true;
+
+        Physics.gravity = prevGravity;
+        Physics.simulationMode = prevMode;
+
+        onDone(new PreSimResult { Pos1 = pos1, Rot1 = rot1, Pos2 = pos2, Rot2 = rot2, Nat1 = nat1, Nat2 = nat2 });
+    }
+
+    // Phase 2 only — trajectory already computed by RunPreSim on shadow dice.
+    // Applies the face-rotation offset for the RNG-decided values and plays back
+    // the recorded positions. No Phase 1, no lag, no retry loop visible to player.
+    public static IEnumerator RollPair(Dice3D d1, int val1, Dice3D d2, int val2, PreSimResult presim)
+    {
+        d1.Settled = false;
+        d2.Settled = false;
+        if (d1.tumbleRoutine != null) { d1.StopCoroutine(d1.tumbleRoutine); d1.tumbleRoutine = null; }
+        if (d2.tumbleRoutine != null) { d2.StopCoroutine(d2.tumbleRoutine); d2.tumbleRoutine = null; }
+        d1.transform.DOKill();
+        d2.transform.DOKill();
+
+        Quaternion off1 = FaceRotationOffset(presim.Nat1, val1);
+        Quaternion off2 = FaceRotationOffset(presim.Nat2, val2);
+
+        d1.rb.isKinematic = true;
+        d1.transform.localPosition = d1.anchorLocalPosition; d1.transform.localRotation = off1;
+        d2.rb.isKinematic = true;
+        d2.transform.localPosition = d2.anchorLocalPosition; d2.transform.localRotation = off2;
+        Physics.SyncTransforms();
+
+        // PlaybackSpeed < 1 = slower than sim time. 0.4 ≈ 2.5× slower than real
+        // physics, matching the leisurely pace of a real bubble-craps machine.
+        const float PlaybackSpeed = 3f;
+        var pos1 = presim.Pos1; var rot1 = presim.Rot1;
+        var pos2 = presim.Pos2; var rot2 = presim.Rot2;
+        int count = pos1.Count;
+        float stepAccum = 0f;
+        int frame = 0;
+        while (true)
+        {
+            d1.transform.position = pos1[frame];
+            d1.transform.rotation = rot1[frame] * off1;
+            d2.transform.position = pos2[frame];
+            d2.transform.rotation = rot2[frame] * off2;
+            if (frame >= count - 1) break;
+            yield return null;
+            stepAccum += PlaybackSpeed * (Time.deltaTime / Time.fixedDeltaTime);
+            while (stepAccum >= 1f && frame < count - 1) { stepAccum -= 1f; frame++; }
+        }
+
+        d1.Settled = true;
+        d2.Settled = true;
+    }
+
+    // Runs one full silent simulation attempt. Returns floor-contact bounce counts
+    // per die (Y-velocity sign flip from negative to positive = one floor bounce).
+    // Physics.simulationMode must already be SimulationMode.Script and gravity set.
+    static void SimulateRoll(Dice3D d1, Dice3D d2,
+        out System.Collections.Generic.List<Vector3> pos1,
+        out System.Collections.Generic.List<Quaternion> rot1,
+        out System.Collections.Generic.List<Vector3> pos2,
+        out System.Collections.Generic.List<Quaternion> rot2,
+        out int bounces1, out int bounces2)
+    {
+        d1.rb.isKinematic = true; d2.rb.isKinematic = true;
+        d1.transform.localPosition = d1.anchorLocalPosition; d1.transform.localRotation = Quaternion.identity;
+        d2.transform.localPosition = d2.anchorLocalPosition; d2.transform.localRotation = Quaternion.identity;
+        Physics.SyncTransforms();
+
+        Vector3 lv1 = d1.LaunchVelocity(), av1 = UnityEngine.Random.insideUnitSphere * LaunchAngularSpeed;
+        Vector3 lv2 = d2.LaunchVelocity(), av2 = UnityEngine.Random.insideUnitSphere * LaunchAngularSpeed;
+
+        d1.rb.isKinematic = false; d1.rb.constraints = RigidbodyConstraints.None;
+        d1.rb.linearVelocity = lv1; d1.rb.angularVelocity = av1;
+        d2.rb.isKinematic = false; d2.rb.constraints = RigidbodyConstraints.None;
+        d2.rb.linearVelocity = lv2; d2.rb.angularVelocity = av2;
+
+        pos1 = new System.Collections.Generic.List<Vector3>();
+        rot1 = new System.Collections.Generic.List<Quaternion>();
+        pos2 = new System.Collections.Generic.List<Vector3>();
+        rot2 = new System.Collections.Generic.List<Quaternion>();
+
+        bounces1 = 0; bounces2 = 0;
+        float prevVelY1 = lv1.y, prevVelY2 = lv2.y;
+        float simTime = 0f, dt = Time.fixedDeltaTime;
+        while (simTime < MaxTossDuration)
+        {
+            pos1.Add(d1.transform.position); rot1.Add(d1.transform.rotation);
+            pos2.Add(d2.transform.position); rot2.Add(d2.transform.rotation);
+            Physics.Simulate(dt);
+            simTime += dt;
+
+            float velY1 = d1.rb.linearVelocity.y;
+            float velY2 = d2.rb.linearVelocity.y;
+            if (prevVelY1 < -0.1f && velY1 >= 0f) bounces1++;
+            if (prevVelY2 < -0.1f && velY2 >= 0f) bounces2++;
+            prevVelY1 = velY1; prevVelY2 = velY2;
+
+            if (d1.rb.linearVelocity.sqrMagnitude < MicroDampLinThreshSq)
+            { d1.rb.linearVelocity *= MicroDampFactor; d1.rb.angularVelocity *= MicroDampFactor; }
+            if (d2.rb.linearVelocity.sqrMagnitude < MicroDampLinThreshSq)
+            { d2.rb.linearVelocity *= MicroDampFactor; d2.rb.angularVelocity *= MicroDampFactor; }
+            if (simTime > MinSettleCheckTime
+                && d1.rb.linearVelocity.sqrMagnitude < SettleLinearThresholdSq
+                && d1.rb.angularVelocity.sqrMagnitude < SettleAngularThresholdSq
+                && d2.rb.linearVelocity.sqrMagnitude < SettleLinearThresholdSq
+                && d2.rb.angularVelocity.sqrMagnitude < SettleAngularThresholdSq)
+            {
+                d1.rb.linearVelocity = Vector3.zero; d1.rb.angularVelocity = Vector3.zero;
+                d2.rb.linearVelocity = Vector3.zero; d2.rb.angularVelocity = Vector3.zero;
+                pos1.Add(d1.transform.position); rot1.Add(d1.transform.rotation);
+                pos2.Add(d2.transform.position); rot2.Add(d2.transform.rotation);
+                break;
+            }
+        }
+    }
+
+    // False if either die is tilted >~18°, stacked, or intersecting.
+    // A real bubble-craps machine re-shakes until dice separate cleanly and lie flat.
+    static bool IsValidSettle(Dice3D d1, Dice3D d2)
+    {
+        if (d1.MaxFaceUpDot() < 0.95f || d2.MaxFaceUpDot() < 0.95f) return false; // tilted >~18°
+        float dy = Mathf.Abs(d1.transform.position.y - d2.transform.position.y);
+        if (dy > d1.dieSize * 0.6f) return false; // stacked
+        Vector3 p1h = new Vector3(d1.transform.position.x, 0f, d1.transform.position.z);
+        Vector3 p2h = new Vector3(d2.transform.position.x, 0f, d2.transform.position.z);
+        if (Vector3.Distance(p1h, p2h) < d1.dieSize * 0.85f) return false; // intersecting
+        return true;
+    }
+
+    // Instantly settles a die that landed on an edge: snaps rotation to the nearest
+    // face-up orientation and drops the center to floor-resting height so it doesn't
+    // visually float. The floor top sits at +0.04 above the dome's origin (from
+    // BubbleCrapsDome's floor collider: center=-0.01, half-height=0.05 → top=0.04).
+    static void SnapDieToFloor(Dice3D die)
+    {
+        float bestDot = float.MinValue;
+        Vector3 bestLocalAxis = Vector3.up;
+        foreach (var (_, axis) in FaceAxis)
+        {
+            float d = Vector3.Dot(die.transform.rotation * axis, Vector3.up);
+            if (d > bestDot) { bestDot = d; bestLocalAxis = axis; }
+        }
+        die.transform.rotation = Quaternion.FromToRotation(die.transform.rotation * bestLocalAxis, Vector3.up) * die.transform.rotation;
+        float floorWorldY = die.transform.parent != null ? die.transform.parent.position.y + 0.04f : 0.04f;
+        var p = die.transform.position;
+        p.y = floorWorldY + die.dieSize * 0.5f;
+        die.transform.position = p;
+    }
+
+    // Local-space pre-rotation applied as (physicsRot * offset) in playback.
+    // We want the FINAL frame to satisfy: (rot_final * offset) * val_axis = world_up.
+    // We know rot_final * nat_axis = world_up (nat was on top after sim).
+    // So we need offset * val_axis = nat_axis  →  offset = FromToRotation(val, nat).
+    // Note: arguments are (toFace=val, fromFace=nat) — opposite of the old left-multiply.
+    static Quaternion FaceRotationOffset(int natFace, int valFace)
+    {
+        if (natFace == valFace) return Quaternion.identity;
+        var nat = Array.Find(FaceAxis, f => f.face == natFace);
+        var val = Array.Find(FaceAxis, f => f.face == valFace);
+        return Quaternion.FromToRotation(val.axis, nat.axis);
+    }
+
+    // Computes a random launch velocity for this die based on its mode.
+    Vector3 LaunchVelocity()
+    {
+        if (domeMode)
+        {
+            float angle = UnityEngine.Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            Vector3 hLocal = new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle));
+            Vector3 hWorld = transform.parent != null ? transform.parent.TransformDirection(hLocal) : hLocal;
+            return hWorld * DomeLaunchHorizontalSpeed + Vector3.up * DomeLaunchUpSpeed;
+        }
+        Vector3 aimDir = landingLocalPosition - anchorLocalPosition;
+        aimDir.y = 0f;
+        aimDir = aimDir.sqrMagnitude > 0.0001f ? aimDir.normalized : Vector3.forward;
+        aimDir = Quaternion.Euler(0f, UnityEngine.Random.Range(-LaunchAngleJitterDeg, LaunchAngleJitterDeg), 0f) * aimDir;
+        Vector3 worldDir = transform.parent != null ? transform.parent.TransformDirection(aimDir) : aimDir;
+        return worldDir * LaunchSpeed + Vector3.up * LaunchUpSpeed;
+    }
+
+    // Single-die roll kept for backward compat — not used by the craps game
+    // (which always rolls both dice together via RollPair).
     public void Roll(int finalValue)
     {
         if (tumbleRoutine != null) StopCoroutine(tumbleRoutine);
-        tumbleRoutine = StartCoroutine(PhysicsToss(finalValue));
+        tumbleRoutine = StartCoroutine(SingleToss());
     }
 
-    IEnumerator PhysicsToss(int finalValue)
+    IEnumerator SingleToss()
     {
         Settled = false;
         transform.DOKill();
-
-        // Every toss launches from the same fixed anchor rather than wherever the
-        // last roll happened to land — a real toss always starts from the
-        // shooter's hand, not from the previous roll's resting spot. Toggling
-        // isKinematic around the teleport keeps physics from fighting the manual
-        // position set. Physics.SyncTransforms() forces PhysX to actually pick up
-        // that new position immediately — without it, setting transform.position
-        // and re-enabling physics in the same frame occasionally left PhysX still
-        // using its last cached (pre-teleport) position for the very next physics
-        // step, so the launch velocity would get applied from the old landed spot
-        // instead of the anchor, which is exactly what an occasional "thrown from
-        // where it last landed" roll was.
         rb.isKinematic = true;
         transform.localPosition = anchorLocalPosition;
         transform.localRotation = Quaternion.identity;
         Physics.SyncTransforms();
         rb.isKinematic = false;
-        rb.linearVelocity = Vector3.zero;
-        rb.angularVelocity = Vector3.zero;
-        // Physics only ever drives position (the bounce/travel path) — rotation
-        // is fully scripted below, so freeze it here or collisions would still
-        // apply real torque on top of (and fighting) the scripted spin.
-        rb.constraints = RigidbodyConstraints.FreezeRotation;
-
-        Vector3 aimDir = landingLocalPosition - anchorLocalPosition;
-        aimDir.y = 0f;
-        aimDir = aimDir.sqrMagnitude > 0.0001f ? aimDir.normalized : Vector3.forward;
-        // A little random spread on the throw angle each roll so tosses aren't
-        // all identical, same intent as the old position-jitter had.
-        aimDir = Quaternion.Euler(0f, UnityEngine.Random.Range(-LaunchAngleJitterDeg, LaunchAngleJitterDeg), 0f) * aimDir;
-
-        Vector3 worldDir = transform.parent != null ? transform.parent.TransformDirection(aimDir) : aimDir;
-        rb.linearVelocity = worldDir * LaunchSpeed + Vector3.up * LaunchUpSpeed;
-
-        var entry = Array.Find(FaceAxis, f => f.face == finalValue);
-        Quaternion target = Quaternion.FromToRotation(entry.axis, Vector3.up);
-
-        // One fixed axis for the whole toss, derived from exactly the rotation
-        // needed to go from the current (identity) orientation to the target —
-        // extra full spins added on top purely for a wild tumbling look, since a
-        // whole number of extra 360s around the same axis doesn't change the
-        // final orientation at all.
-        Quaternion startRot = transform.rotation;
-        (target * Quaternion.Inverse(startRot)).ToAngleAxis(out float deltaAngle, out Vector3 spinAxis);
-        if (spinAxis.sqrMagnitude < 0.0001f) spinAxis = Vector3.up; // degenerate only when target == startRot
-        float totalAngle = deltaAngle + 360f * UnityEngine.Random.Range(MinExtraSpins, MaxExtraSpins + 1);
-
-        float rt = 0f;
-        while (rt < RotateDuration)
-        {
-            rt += Time.deltaTime;
-            float p = Mathf.Clamp01(rt / RotateDuration);
-            float eased = 1f - Mathf.Pow(1f - p, 3f); // fast start, smooth decelerating stop
-            transform.rotation = Quaternion.AngleAxis(totalAngle * eased, spinAxis) * startRot;
-            yield return null;
-        }
-        transform.rotation = target;
-
-        // Rotation is done; keep waiting only if the die is still physically
-        // bouncing/sliding around, so it doesn't look like it stopped tumbling
-        // while still visibly skidding across the felt.
+        rb.constraints = RigidbodyConstraints.None;
+        rb.linearVelocity = LaunchVelocity();
+        rb.angularVelocity = UnityEngine.Random.insideUnitSphere * LaunchAngularSpeed;
         float t = 0f;
         while (t < MaxTossDuration)
         {
             t += Time.deltaTime;
-            if (t > MinSettleCheckTime && rb.linearVelocity.sqrMagnitude < SettleLinearThresholdSq)
+            if (t > MinSettleCheckTime
+                && rb.linearVelocity.sqrMagnitude < SettleLinearThresholdSq
+                && rb.angularVelocity.sqrMagnitude < SettleAngularThresholdSq)
                 break;
             yield return null;
         }
-
         rb.isKinematic = true;
-        rb.linearVelocity = Vector3.zero;
-
         Settled = true;
         tumbleRoutine = null;
+    }
+
+    int DetectTopFace()
+    {
+        int topFace = 1;
+        float maxDot = float.MinValue;
+        foreach (var (face, axis) in FaceAxis)
+        {
+            float dot = Vector3.Dot(transform.TransformDirection(axis), Vector3.up);
+            if (dot > maxDot) { maxDot = dot; topFace = face; }
+        }
+        return topFace;
+    }
+
+    // Highest dot product of any face axis with world-up — 1.0 = perfectly flat,
+    // ~0.71 = balanced on an edge (45°), ~0.58 = balanced on a corner.
+    float MaxFaceUpDot()
+    {
+        float max = 0f;
+        foreach (var (_, axis) in FaceAxis)
+            max = Mathf.Max(max, Vector3.Dot(transform.TransformDirection(axis), Vector3.up));
+        return max;
     }
 
     static void EnsurePipTextures()

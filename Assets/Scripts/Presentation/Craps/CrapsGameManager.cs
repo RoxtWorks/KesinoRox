@@ -205,36 +205,17 @@ public class CrapsGameManager : MonoBehaviour
         // same margin discipline as before.
         resultsStrip.Build(canvasGO.transform, new Vector2(0, -505));
 
-        // Two real 3D dice, built the same way the roulette wheel is (RouletteTableBuilder
-        // + WheelSpinAnimator: purely visual, no physics) — launched from the top-left
-        // corner (below the chip panel) and tossed across to a landing zone near the
-        // right edge each roll, like a real toss thrown down the table to the far
-        // rail. Visible over the felt/UI everywhere via the dice overlay camera/
-        // RenderTexture built in BuildDiceOverlay below, instead of only inside a
-        // single gap. Both points computed via a camera ray through a viewport point
-        // intersected with a ground plane, rather than guessed screen pixels, since
-        // the dice are real 3D objects the 2D canvas has no positioning authority over.
-        const float groundY = -0.4f;
-        Vector3 launchCenter = ViewportToGround(cam, new Vector2(0.085f, 0.62f), groundY);
-        Vector3 landingCenter = ViewportToGround(cam, new Vector2(0.88f, 0.55f), groundY);
-
-        BuildDicePit(groundY, launchCenter, landingCenter);
-
-        // Offset front/back (Z — the screen-vertical axis under this top-down
-        // camera) rather than left/right (X — the same axis as the throw itself).
-        // Both dice still collide with each other for real (no IgnoreCollision —
-        // a die clipping the other after it's already bounced off a wall is a
-        // real, wanted moment), but two side-by-side lanes both throwing rightward
-        // were prone to crossing paths early via each die's own random launch-
-        // angle jitter, and an early collision dumps most of one die's momentum
-        // into the other, leaving it stalled near the launch corner. Separate
-        // front/back lanes keep the initial throws roughly parallel instead.
-        var die1 = Dice3D.Create(transform, launchCenter + Vector3.back * 0.55f, landingCenter + Vector3.back * 0.55f, size: 0.95f);
-        var die2 = Dice3D.Create(transform, launchCenter + Vector3.forward * 0.55f, landingCenter + Vector3.forward * 0.55f, size: 0.95f);
+        // Dome placed at a fixed world position well away from the main table
+        // geometry (which lives near world origin). The DiceOverlayCamera renders
+        // it independently at its own 3/4 view angle, so the dome's world position
+        // has no bearing on where it appears on screen.
+        var dome = BubbleCrapsDome.Create(transform, new Vector3(20f, 0f, 20f));
+        var die1 = dome.Die1;
+        var die2 = dome.Die2;
 
         bettingController = gameObject.AddComponent<CrapsBettingUIController>();
         bettingController.Build(canvasGO.transform, bankroll, chipSelector, rng, soundManager, juiceManager,
-            floatingText, milestoneToast, die1, die2,
+            floatingText, milestoneToast, die1, die2, dome.ShadowDie1, dome.ShadowDie2,
             record =>
             {
                 // Shooter-turn end only (seven-out): session persistence still
@@ -272,58 +253,57 @@ public class CrapsGameManager : MonoBehaviour
 
         soundManager.PlayMusic();
 
-        BuildDiceOverlay(canvasGO.transform, die1, die2);
+        BuildDiceOverlay(canvasGO.transform, dome);
 
         SceneTransition.Reveal();
     }
 
-    // The main camera renders the dice normally, but the Overlay canvas (everything
-    // else — felt, HUD, panels) always draws on top of it with no exceptions, which
-    // is why a toss could only ever be seen in the one small gap of screen the dice
-    // happened to occupy. Switching the whole canvas to Screen Space - Camera would
-    // fix that, but it also changes how CanvasScaler sizes every single element
-    // relative to this scene's narrow top-down FOV — tried it, and it blew the whole
-    // UI's scale up inconsistently. Instead: render just the dice (on their own
-    // layer) to a separate camera pointed at a transparent RenderTexture, and show
-    // that texture through one full-screen RawImage placed as the very last object
-    // in the canvas. Wherever there's no die pixel the texture is transparent and
-    // the normal UI shows through untouched; wherever a die pixel exists it draws on
-    // top of everything else, letting a toss travel visibly over the whole table.
-    void BuildDiceOverlay(Transform canvasParent, Dice3D die1, Dice3D die2)
+    // Renders the dome to its own 512×512 RenderTexture via a dedicated camera
+    // positioned at a 3/4 angle (~40° elevation, slightly to the side). This lets
+    // the player see the dome floor clearly — they can verify the dice actually
+    // landed flat and read the face-up value, which the original top-down view made
+    // impossible. The RawImage is placed at a fixed canvas position (upper-left,
+    // out of the way of the betting felt) rather than spanning the full screen.
+    void BuildDiceOverlay(Transform canvasParent, BubbleCrapsDome dome)
     {
         int diceLayer = LayerMask.NameToLayer("CrapsDice");
-        SetLayerRecursive(die1.transform, diceLayer);
-        SetLayerRecursive(die2.transform, diceLayer);
-        cam.cullingMask &= ~(1 << diceLayer); // main camera no longer needs to draw them itself
+        SetLayerRecursive(dome.transform, diceLayer);
+        Physics.IgnoreLayerCollision(diceLayer, diceLayer, false); // dome walls + dice collide
+        Physics.IgnoreLayerCollision(diceLayer, 0, true);          // ignore Default-layer table geo
+        cam.cullingMask &= ~(1 << diceLayer);
 
-        // Explicit sRGB descriptor — in a Linear-colorspace project (this one's
-        // default), a RenderTexture created without this reads back darker than the
-        // same object looks when the main camera renders it straight to the gamma-
-        // corrected backbuffer, which is exactly the washed-out/dim look the overlay
-        // dice had here.
-        var rtDesc = new RenderTextureDescriptor(1920, 1080, RenderTextureFormat.ARGB32, 24) { sRGB = true };
+        // Square RT — 512×512 at the ~420-canvas-unit display size is sharp enough.
+        var rtDesc = new RenderTextureDescriptor(512, 512, RenderTextureFormat.ARGB32, 24) { sRGB = true };
         var rt = new RenderTexture(rtDesc) { name = "DiceOverlayRT" };
         rt.Create();
 
+        // Aim at dome mid-height so the full cylinder (floor + ceiling) fits in frame.
+        Vector3 domeAim = dome.transform.position + Vector3.up * 1.25f;
         var diceCamGO = new GameObject("DiceOverlayCamera");
         var diceCam = diceCamGO.AddComponent<Camera>();
-        diceCam.CopyFrom(cam); // matches position/rotation/FOV so the dice line up with where the main camera would draw them
         diceCam.clearFlags = CameraClearFlags.SolidColor;
         diceCam.backgroundColor = new Color(0f, 0f, 0f, 0f);
         diceCam.cullingMask = 1 << diceLayer;
         diceCam.targetTexture = rt;
         diceCam.depth = cam.depth + 1;
+        diceCam.fieldOfView = 54f;
+        diceCam.farClipPlane = 60f;
+        // ~40° elevation, slight rightward offset — shows dome floor clearly so the
+        // player can see where each die landed and verify the face-up result.
+        diceCamGO.transform.position = domeAim + new Vector3(0.6f, 2.6f, 3.6f);
+        diceCamGO.transform.LookAt(domeAim, Vector3.up);
 
+        // Upper-left canvas position — clear of the felt, HUD, and history panel.
         var overlayGO = new GameObject("DiceOverlayImage", typeof(RectTransform));
         overlayGO.transform.SetParent(canvasParent, false);
         var raw = overlayGO.AddComponent<RawImage>();
         raw.texture = rt;
         raw.raycastTarget = false;
         var overlayRt = overlayGO.GetComponent<RectTransform>();
-        overlayRt.anchorMin = Vector2.zero;
-        overlayRt.anchorMax = Vector2.one;
-        overlayRt.offsetMin = Vector2.zero;
-        overlayRt.offsetMax = Vector2.zero;
+        overlayRt.anchorMin = overlayRt.anchorMax = new Vector2(0.5f, 0.5f);
+        overlayRt.pivot = new Vector2(0.5f, 0.5f);
+        overlayRt.anchoredPosition = new Vector2(-530f, 210f);
+        overlayRt.sizeDelta = new Vector2(420f, 420f);
         overlayGO.transform.SetAsLastSibling();
     }
 
@@ -342,78 +322,6 @@ public class CrapsGameManager : MonoBehaviour
         Ray ray = camera.ViewportPointToRay(viewportPos);
         float t = (groundY - ray.origin.y) / ray.direction.y;
         return ray.origin + ray.direction * t;
-    }
-
-    const float DicePitWallHeight = 2.2f;
-    const float DicePitWallThickness = 0.3f;
-
-    // A real (invisible) rectangular pit of BoxColliders around the play area —
-    // walls on all four sides plus a floor — for the dice's real Rigidbody
-    // physics to actually bounce off of. Sized directly from the known launch and
-    // landing points with a fixed margin, NOT from camera viewport corners — a
-    // first pass did that (a viewport rect at groundY), which sounded like the
-    // "correct" way to match what's actually visible, but this camera is tilted
-    // steeply enough that a viewport point near the top of the screen casts a ray
-    // close to the horizon; ViewportPointToRay/plane-intersect on a ray that
-    // shallow returns a point extremely far away, which silently placed a wall
-    // way out past anything actually on screen — the dice weren't escaping a
-    // hole in the pit, the "far" wall just wasn't anywhere near where it looked
-    // like it should be. Bounds built from launchCenter/landingCenter plus a
-    // fixed margin stay proportional to the actual play area regardless of the
-    // camera's projection quirks. If a toss ever needs to be blocked in some
-    // other direction, another collider can be added the same way this whole pit
-    // was. No Renderer/mesh on any of them — invisible by construction, not by
-    // an invisible material.
-    const float DicePitMargin = 1.8f;
-
-    void BuildDicePit(float groundY, Vector3 launchCenter, Vector3 landingCenter)
-    {
-        float minX = Mathf.Min(launchCenter.x, landingCenter.x) - DicePitMargin;
-        float maxX = Mathf.Max(launchCenter.x, landingCenter.x) + DicePitMargin;
-        float minZ = Mathf.Min(launchCenter.z, landingCenter.z) - DicePitMargin;
-        float maxZ = Mathf.Max(launchCenter.z, landingCenter.z) + DicePitMargin;
-        float centerX = (minX + maxX) / 2f;
-        float centerZ = (minZ + maxZ) / 2f;
-        float width = maxX - minX;
-        float depth = maxZ - minZ;
-
-        var wallMat = new PhysicsMaterial("DiceWall")
-        {
-            bounciness = 0.55f, dynamicFriction = 0.25f, staticFriction = 0.25f,
-            frictionCombine = PhysicsMaterialCombine.Average, bounceCombine = PhysicsMaterialCombine.Average
-        };
-        // High friction + Maximum combine (paired with the die's own material) —
-        // the die's rotation is frozen during a toss (see Dice3D.PhysicsToss), so
-        // it can't shed speed by actually tumbling like a real die; the floor
-        // needs to grip hard on its own or a slide reads as sliding on ice.
-        var floorMat = new PhysicsMaterial("DiceFloor")
-        {
-            bounciness = 0.1f, dynamicFriction = 0.9f, staticFriction = 1f,
-            frictionCombine = PhysicsMaterialCombine.Maximum, bounceCombine = PhysicsMaterialCombine.Average
-        };
-
-        float t = DicePitWallThickness;
-        float h = DicePitWallHeight;
-        BuildPitCollider("DicePit_Right", new Vector3(maxX + t / 2f, groundY + h / 2f, centerZ), new Vector3(t, h, depth), wallMat);
-        BuildPitCollider("DicePit_Left", new Vector3(minX - t / 2f, groundY + h / 2f, centerZ), new Vector3(t, h, depth), wallMat);
-        BuildPitCollider("DicePit_Far", new Vector3(centerX, groundY + h / 2f, maxZ + t / 2f), new Vector3(width, h, t), wallMat);
-        BuildPitCollider("DicePit_Near", new Vector3(centerX, groundY + h / 2f, minZ - t / 2f), new Vector3(width, h, t), wallMat);
-        BuildPitCollider("DicePit_Floor", new Vector3(centerX, groundY - t / 2f, centerZ), new Vector3(width, t, depth), floorMat);
-        // Ceiling — the side walls only cap escape up to their own height, not
-        // above it, so a hard enough bounce could arc clean over them and keep
-        // traveling outside the pit while airborne. Closing the top makes it an
-        // actual sealed box, not four open-topped walls.
-        BuildPitCollider("DicePit_Ceiling", new Vector3(centerX, groundY + h + t / 2f, centerZ), new Vector3(width, t, depth), wallMat);
-    }
-
-    void BuildPitCollider(string name, Vector3 localPos, Vector3 size, PhysicsMaterial mat)
-    {
-        var go = new GameObject(name);
-        go.transform.SetParent(transform, false);
-        go.transform.localPosition = localPos;
-        var col = go.AddComponent<BoxCollider>();
-        col.size = size;
-        col.material = mat;
     }
 
     void OnApplicationQuit()

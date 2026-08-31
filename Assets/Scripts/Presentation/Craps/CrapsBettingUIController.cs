@@ -48,6 +48,9 @@ public class CrapsBettingUIController : MonoBehaviour
     Transform tableRoot;
     Text statusText;
     Dice3D die1UI, die2UI;
+    Dice3D shadowDie1, shadowDie2;
+    PreSimResult pendingPresim;
+    Coroutine presimRoutine;
 
     // Odds confirmation modal — auto-opens whenever a point is established on
     // Pass Line or a Come wager parks at its own point, so the player never has
@@ -116,7 +119,8 @@ public class CrapsBettingUIController : MonoBehaviour
 
     public void Build(Transform canvas, Bankroll bankroll, ChipSelectorUI chipSelector, IRandomSource rng,
         SoundManager soundManager, JuiceManager juiceManager, FloatingTextUI floatingText, FloatingTextUI milestoneToast,
-        Dice3D die1, Dice3D die2, Action<CrapsRoundRecord> onRoundResolved, Action onBankrollChanged,
+        Dice3D die1, Dice3D die2, Dice3D shadow1, Dice3D shadow2,
+        Action<CrapsRoundRecord> onRoundResolved, Action onBankrollChanged,
         Action<string, Color> onRollResolved, Action<CrapsRoundRecord> onRollLogged)
     {
         this.bankroll = bankroll;
@@ -132,6 +136,8 @@ public class CrapsBettingUIController : MonoBehaviour
         this.onRollLogged = onRollLogged;
         die1UI = die1;
         die2UI = die2;
+        shadowDie1 = shadow1;
+        shadowDie2 = shadow2;
 
         currentRound = new CrapsRound(rng);
 
@@ -244,6 +250,17 @@ public class CrapsBettingUIController : MonoBehaviour
 
         RefreshBetDisplay();
         RefreshActionButtons();
+
+        // Kick off the first pre-sim immediately — by the time the player can click
+        // ROLL, the shadow dice will already have a valid trajectory ready.
+        StartPresim();
+    }
+
+    void StartPresim()
+    {
+        if (presimRoutine != null) StopCoroutine(presimRoutine);
+        pendingPresim = null;
+        presimRoutine = StartCoroutine(Dice3D.RunPreSim(shadowDie1, shadowDie2, result => { pendingPresim = result; presimRoutine = null; }));
     }
 
     // Same construction pattern as the other games' streak/achievement badges: framed
@@ -858,6 +875,8 @@ public class CrapsBettingUIController : MonoBehaviour
     void OnRollClicked()
     {
         if (rolling) return;
+        rolling = true;
+        rollButton.interactable = false;
         undoStack.Clear();
         StartCoroutine(RollSequence());
     }
@@ -909,19 +928,23 @@ public class CrapsBettingUIController : MonoBehaviour
         long fieldBetNow = currentRound.GetBet(CrapsBetType.Field);
         if (fieldBetNow > 0) lastOneRollBets[CrapsBetType.Field] = fieldBetNow;
 
+        // Wait for pre-sim if player pressed ROLL before it finished (rare edge case).
+        while (pendingPresim == null) yield return null;
+        var presim = pendingPresim;
+        pendingPresim = null;
+
         var result = currentRound.Roll();
         rollCount++;
 
-        die1UI.Roll(result.Die1);
-        die2UI.Roll(result.Die2);
-        // Real physics settling time isn't fixed (depends on how the bounce plays
-        // out), so wait on the dice actually reporting settled rather than a timer.
-        yield return new WaitUntil(() => die1UI.Settled && die2UI.Settled);
+        yield return StartCoroutine(Dice3D.RollPair(die1UI, result.Die1, die2UI, result.Die2, presim));
 
         ApplyRollResult(result, passBefore, passOddsBefore, pointBefore, placesBefore, activeBetsBefore, nonPlaceActiveBefore, placesWorkingBefore, oneRollStakesBefore, hardBefore);
 
         rolling = false;
         RefreshActionButtons();
+
+        // Pre-sim next roll immediately while player reads result and places bets.
+        StartPresim();
     }
 
     long SumActiveClearableBets()
