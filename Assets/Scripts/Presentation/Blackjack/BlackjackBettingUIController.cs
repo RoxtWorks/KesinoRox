@@ -113,9 +113,9 @@ public class BlackjackBettingUIController : MonoBehaviour
         dealerHandUI = new HandUI();
         dealerHandUI.Build(tableRoot, new Vector2(PanelCenterX, 95));
 
-        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 5), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -20), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
-        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 5), 20,
+        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -20), 20,
             sizeDelta: new Vector2(500, 34), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place your bet, then DEAL";
 
