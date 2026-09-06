@@ -33,7 +33,14 @@ public static class UIFactory
     {
         btn.interactable = enabled;
         var img = btn.GetComponent<Image>();
-        if (img != null) img.color = enabled ? baseColor : DisabledButton;
+        Color targetBg = enabled ? baseColor : DisabledButton;
+        if (img != null) img.color = targetBg;
+        // Re-derive label contrast for the new background — bright buttons (e.g.
+        // Positive green) use dark text, but the grey disabled state needs light text.
+        float lum = 0.299f * targetBg.r + 0.587f * targetBg.g + 0.114f * targetBg.b;
+        Color labelColor = lum > 0.5f ? new Color(0.06f, 0.06f, 0.06f) : TextLight;
+        var tmp = btn.GetComponentInChildren<TextMeshProUGUI>();
+        if (tmp != null) tmp.color = labelColor;
     }
 
     // Thousands separators on every balance/bet/history number in the project —

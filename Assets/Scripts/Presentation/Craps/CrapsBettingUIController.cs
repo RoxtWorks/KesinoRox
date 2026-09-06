@@ -17,6 +17,9 @@ using UnityEngine.UI;
 // state, same Core-only-owns-the-money-and-odds split every other controller uses.
 public class CrapsBettingUIController : MonoBehaviour
 {
+    static readonly string[] WinFlavors  = { "Roll again!", "Dice are hot!", "Keep shooting!", "There it is!", "Nice roll!" };
+    static readonly string[] LoseFlavors = { "Roll again", "Next roll's yours", "Reload and go", "Come back swinging", "Shake it off" };
+
     Bankroll bankroll;
     ChipSelectorUI chipSelector;
     IRandomSource rng;
@@ -36,6 +39,9 @@ public class CrapsBettingUIController : MonoBehaviour
     long roundTotalReturned;
     int rollCount;
     int winStreak;
+    long bestRollNet;
+    bool doubledMilestoneFired;
+    readonly HashSet<int> roundMilestonesFired = new HashSet<int>();
     bool rolling;
 
     long lastLineAmount;
@@ -46,6 +52,7 @@ public class CrapsBettingUIController : MonoBehaviour
     GameObject streakBadgeGO;
 
     Transform tableRoot;
+    Transform canvasRoot;
     Text statusText;
     Dice3D die1UI, die2UI;
     Dice3D shadowDie1, shadowDie2;
@@ -141,6 +148,9 @@ public class CrapsBettingUIController : MonoBehaviour
 
         currentRound = new CrapsRound(rng);
 
+        canvasRoot = canvas;
+        TooltipUI.Create(canvas);
+
         var tableRootGO = new GameObject("CrapsUIRoot");
         tableRootGO.transform.SetParent(canvas, false);
         var tableRootRT = tableRootGO.AddComponent<RectTransform>();
@@ -182,7 +192,7 @@ public class CrapsBettingUIController : MonoBehaviour
         fieldAmtRt.sizeDelta = new Vector2(720, 20);
 
         // Each number is its own positioned Text (not one shared string) so 2 and 12
-        // can be individually bigger/bolder, evenly spaced, with their payout tags
+        // can be individually bigger/bolder and vertically offset upward, with their payout tags
         // sitting directly underneath them — not an approximate offset guessed
         // against one centered block of text — and pulled fully inside the box's own
         // bounds (y=-24, box half-height 35) instead of nearly poking past the edge.
@@ -193,12 +203,15 @@ public class CrapsBettingUIController : MonoBehaviour
         {
             int n = fieldNumbers[i];
             bool bonus = n == 2 || n == 12;
-            var numText = UIFactory.MakeText(fieldSpot.Root.transform, $"FieldNum_{n}", new Vector2(fieldStartX + i * fieldSpacing, -4), bonus ? 22 : 15,
+            // 2 and 12 sit 8px higher than the other numbers so their payout tag has
+            // room below without clipping into the frame border.
+            float numY = bonus ? 8f : -3f;
+            var numText = UIFactory.MakeText(fieldSpot.Root.transform, $"FieldNum_{n}", new Vector2(fieldStartX + i * fieldSpacing, numY), bonus ? 23 : 16,
                 sizeDelta: new Vector2(fieldSpacing - 6, 30), color: UIFactory.TextLight, style: FontStyle.Bold);
             numText.text = n.ToString();
             if (bonus)
             {
-                var payTag = UIFactory.MakeText(fieldSpot.Root.transform, $"FieldPay_{n}", new Vector2(fieldStartX + i * fieldSpacing, -24), 13,
+                var payTag = UIFactory.MakeText(fieldSpot.Root.transform, $"FieldPay_{n}", new Vector2(fieldStartX + i * fieldSpacing, -12), 14,
                     sizeDelta: new Vector2(fieldSpacing + 10, 18), color: new Color(1f, 0.75f, 0.2f), style: FontStyle.Bold);
                 payTag.text = n == 2 ? "PAYS 2X" : "PAYS 3X";
             }
@@ -227,13 +240,13 @@ public class CrapsBettingUIController : MonoBehaviour
         clearBaseColor = UIFactory.RedBet;
         rollBaseColor = UIFactory.Positive;
         repeatBaseColor = UIFactory.AccentDim;
-        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-330f, actionY), new Vector2(150, 46),
+        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-330f, actionY), new Vector2(173, 53),
             "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
-        rollButton = UIFactory.MakeButton(tableRoot, "RollBtn", new Vector2(-110f, actionY), new Vector2(170, 54),
-            "ROLL", rollBaseColor, OnRollClicked, 18, pixelFont: true);
-        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(110f, actionY), new Vector2(150, 46),
+        rollButton = UIFactory.MakeButton(tableRoot, "RollBtn", new Vector2(-110f, actionY), new Vector2(196, 62),
+            "ROLL", rollBaseColor, OnRollClicked, 20, pixelFont: true);
+        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(110f, actionY), new Vector2(173, 53),
             "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
-        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(330f, actionY), new Vector2(130, 46),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(330f, actionY), new Vector2(150, 53),
             "UNDO", UIFactory.AccentDim, OnUndoClicked, 13, pixelFont: true);
         // Real bubble-craps machines offer this as a standing "BETS ON/OFF" toggle
         // instead of the standard off-by-default-on-come-out house rule — forces
@@ -337,21 +350,21 @@ public class CrapsBettingUIController : MonoBehaviour
         // tell them apart was counting positions across the row). Amount and payout
         // are separate rows underneath, both visible at once — number + chips +
         // payout all readable together, matching a real table's felt printing.
-        var numberText = UIFactory.MakeText(go.transform, "NumberText", new Vector2(0, diameter * 0.28f), 16,
+        var numberText = UIFactory.MakeText(go.transform, "NumberText", new Vector2(0, diameter * 0.28f), 19,
             sizeDelta: new Vector2(diameter - 8, diameter * 0.3f), color: UIFactory.TextLight, style: FontStyle.Bold);
         numberText.text = $"{number}";
         var numberShadow = numberText.gameObject.AddComponent<Shadow>();
         numberShadow.effectColor = new Color(0, 0, 0, 0.85f);
         numberShadow.effectDistance = new Vector2(1, -1);
 
-        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, diameter * 0.02f), 13,
+        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, diameter * 0.02f), 14,
             sizeDelta: new Vector2(diameter - 8, diameter * 0.24f), color: UIFactory.Positive, style: FontStyle.Bold);
         var amountShadow = amountText.gameObject.AddComponent<Shadow>();
         amountShadow.effectColor = new Color(0, 0, 0, 0.85f);
         amountShadow.effectDistance = new Vector2(1, -1);
 
-        var payoutText = UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, -diameter * 0.34f), 13,
-            sizeDelta: new Vector2(diameter - 4, 16), color: UIFactory.TextDim);
+        var payoutText = UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, -diameter * 0.34f), 15,
+            sizeDelta: new Vector2(diameter - 4, 18), color: UIFactory.TextDim);
         payoutText.text = payoutLabel;
 
         return new NumberSpot { Number = number, Root = go, NumberText = numberText, AmountText = amountText, PayoutText = payoutText, FrameImg = frameImg, BaseFrameColor = accentColor };
@@ -378,23 +391,46 @@ public class CrapsBettingUIController : MonoBehaviour
         {
             int n = HardNumbers[i];
             hardSpots[n] = BuildSideBetRow($"HardSpot_{n}", new Vector2(leftX, rowY[i]), new Color(0.55f, 0.3f, 0.55f),
-                HardPayoutLabel(n), () => OnHardwayBetClicked(n));
+                $"HARD {n}", HardPayoutLabel(n), () => OnHardwayBetClicked(n));
+            hardSpots[n].Root.AddComponent<TooltipTrigger>().Text = HardTooltip(n);
         }
         for (int i = 0; i < PropTypes.Length; i++)
         {
             var t = PropTypes[i];
             propSpots[t] = BuildSideBetRow($"PropSpot_{t}", new Vector2(rightX, rowY[i]), new Color(0.2f, 0.45f, 0.55f),
-                PropPayoutLabel(t), () => OnPropBetClicked(t));
+                PropLabel(t), PropPayoutLabel(t), () => OnPropBetClicked(t));
+            propSpots[t].Root.AddComponent<TooltipTrigger>().Text = PropTooltip(t);
         }
     }
 
-    FlatBarSpot BuildSideBetRow(string name, Vector2 pos, Color accentColor, string payoutLabel, UnityEngine.Events.UnityAction onClick)
+    static string HardTooltip(int n) => n switch
+    {
+        4  => "HARD 4: Both dice show 2. Pays 7:1. Loses on 7 or any easy 4 (1+3).",
+        6  => "HARD 6: Both dice show 3. Pays 9:1. Loses on 7 or any easy 6.",
+        8  => "HARD 8: Both dice show 4. Pays 9:1. Loses on 7 or any easy 8.",
+        10 => "HARD 10: Both dice show 5. Pays 7:1. Loses on 7 or any easy 10 (4+6).",
+        _  => ""
+    };
+
+    static string PropTooltip(CrapsBetType t) => t switch
+    {
+        CrapsBetType.AnyCraps  => "ANY CRAPS: Wins on 2, 3, or 12. Resolved every roll. Pays 7:1.",
+        CrapsBetType.AnySeven  => "ANY SEVEN: Wins on 7. Resolved every roll. Pays 4:1.",
+        CrapsBetType.AnyEleven => "ELEVEN: Wins on 11 (6+5). Resolved every roll. Pays 15:1.",
+        _                      => "HORN: Bet splits 4 ways across 2, 3, 11, and 12. Winning number pays 30:1 (for 2 or 12) or 15:1 (for 3 or 11). The other three shares lose. Resolved every roll.",
+    };
+
+    FlatBarSpot BuildSideBetRow(string name, Vector2 pos, Color accentColor, string nameLabel, string payoutLabel, UnityEngine.Events.UnityAction onClick)
     {
         var spot = BuildBarSpot(name, pos, new Vector2(190, 70), accentColor, onClick);
+        // Three-row layout: bet name (top) / amount (middle) / payout (bottom)
+        var nameText = UIFactory.MakeText(spot.Root.transform, "NameText", new Vector2(0, 20), 16,
+            sizeDelta: new Vector2(172, 20), color: UIFactory.TextLight, style: FontStyle.Bold);
+        nameText.text = nameLabel;
         var amtRt = spot.AmountText.GetComponent<RectTransform>();
-        amtRt.anchoredPosition = new Vector2(0, 12);
-        var payoutText = UIFactory.MakeText(spot.Root.transform, "PayoutText", new Vector2(0, -16), 15,
-            sizeDelta: new Vector2(170, 20), color: UIFactory.TextDim);
+        amtRt.anchoredPosition = new Vector2(0, 0);
+        var payoutText = UIFactory.MakeText(spot.Root.transform, "PayoutText", new Vector2(0, -21), 16,
+            sizeDelta: new Vector2(172, 20), color: UIFactory.TextDim);
         payoutText.text = payoutLabel;
         return spot;
     }
@@ -486,6 +522,7 @@ public class CrapsBettingUIController : MonoBehaviour
         currentRound.PlaceBet(CrapsBetType.PassLine, chip);
         roundTotalStaked += chip;
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, (RectTransform)passSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         PushUndoBet(CrapsBetType.PassLine, chip);
         RefreshBetDisplay();
         RefreshActionButtons();
@@ -509,6 +546,7 @@ public class CrapsBettingUIController : MonoBehaviour
         var wager = currentRound.PlaceComeBet(chip);
         roundTotalStaked += chip;
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, (RectTransform)comeSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         // Only undoable while still "traveling" (no point yet) — once parked it's a
         // contract bet like everything else, same rule real craps uses.
         undoStack.Add(() =>
@@ -538,6 +576,7 @@ public class CrapsBettingUIController : MonoBehaviour
         currentRound.PlaceBet(CrapsBetType.Field, chip);
         roundTotalStaked += chip;
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, (RectTransform)fieldSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         PushUndoBet(CrapsBetType.Field, chip);
         RefreshBetDisplay();
         RefreshActionButtons();
@@ -850,6 +889,7 @@ public class CrapsBettingUIController : MonoBehaviour
             return;
         }
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, repeatButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
         RefreshBetDisplay();
         RefreshActionButtons();
     }
@@ -1046,29 +1086,50 @@ public class CrapsBettingUIController : MonoBehaviour
         if (result.AnySevenReturn > 0) parts.Add("Any Seven paid!");
         if (result.AnyElevenReturn > 0) parts.Add("Eleven paid!");
         if (result.HornReturn > 0) parts.Add("Horn paid!");
+        if (totalReturned > 0)
+            parts.Add(WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)]);
+        else if (result.RoundOver)
+            parts.Add(LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)]);
+
         statusText.color = totalReturned > 0 ? UIFactory.Positive : (result.RoundOver ? UIFactory.Negative : UIFactory.Accent);
         statusText.text = string.Join("  —  ", parts);
 
         if (totalReturned > 0)
         {
             soundManager?.PlayWin();
-            if (totalReturned >= 500)
+            if (totalReturned >= ChipDenominations.Values[2]) // $500+
             {
                 juiceManager?.Shake(0.5f, 4f);
                 juiceManager?.Flash(new Color(0.3f, 1f, 0.4f, 0.28f), 0.7f);
                 juiceManager?.PlayConfetti(2f);
                 juiceManager?.PulseLight(0.9f, 0.7f);
                 juiceManager?.PlayMoneyFountain(Vector2.zero);
-                floatingText?.Show($"HUGE HIT! +{UIFactory.FormatMoney(totalReturned)}", UIFactory.Positive, fontSize: 42);
+                floatingText?.Show($"HUGE WIN! +{UIFactory.FormatMoney(totalReturned)}", UIFactory.Positive, fontSize: 42);
             }
-            else
+            else if (totalReturned >= ChipDenominations.Values[0] * 4L) // $100+
             {
                 juiceManager?.Shake(0.3f, 2f);
                 juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.18f), 0.5f);
                 juiceManager?.PlayConfetti();
                 floatingText?.Show($"+{UIFactory.FormatMoney(totalReturned)}", UIFactory.Positive);
             }
+            else
+            {
+                juiceManager?.MicroShake(1.3f);
+                juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.1f), 0.3f);
+                floatingText?.Show($"+{UIFactory.FormatMoney(totalReturned)}", UIFactory.Positive);
+            }
             winStreak++;
+            if (!doubledMilestoneFired && bankroll.TotalFunded > 0 && bankroll.Balance >= bankroll.TotalFunded * 2)
+            { doubledMilestoneFired = true; milestoneToast?.Show("BANKROLL DOUBLED!", UIFactory.Accent, fontSize: 30); }
+            if (winStreak == 5 || winStreak == 10 || winStreak == 15 || winStreak == 20)
+                milestoneToast?.Show($"{winStreak} HIT STREAK!", new Color(1f, 0.85f, 0.2f), fontSize: 30);
+            if (totalReturned > bestRollNet && roundIndex >= 2)
+            {
+                bestRollNet = totalReturned;
+                milestoneToast?.Show($"BEST WIN: +{UIFactory.FormatMoney(totalReturned)}!", UIFactory.Positive, fontSize: 26);
+            }
+            else if (totalReturned > bestRollNet) { bestRollNet = totalReturned; }
         }
         else if (result.RoundOver)
         {
@@ -1079,8 +1140,10 @@ public class CrapsBettingUIController : MonoBehaviour
             winStreak = 0;
         }
 
-        streakAnimator.SetText(winStreak >= 2 ? $"<wave><rainb>{winStreak} HIT STREAK</rainb></wave>" : "");
-        streakBadgeGO.SetActive(winStreak >= 2);
+        bool showStreak = winStreak >= 2;
+        streakAnimator.SetText(showStreak ? $"<wave><rainb>{winStreak} HIT STREAK</rainb></wave>" : "");
+        streakBadgeGO.SetActive(showStreak);
+        if (showStreak) JuiceTweens.Pulse(this, (RectTransform)streakBadgeGO.transform, peakScale: 1.15f, duration: 0.3f);
 
         if (result.RoundOver)
         {
@@ -1098,6 +1161,10 @@ public class CrapsBettingUIController : MonoBehaviour
             var record = new CrapsRoundRecord(roundIndex, pointBefore, rollCount, roundTotalStaked, roundTotalReturned, bankroll.Balance);
             onRoundResolved?.Invoke(record);
             roundIndex++;
+            int[] turnTargets = { 50, 100, 250, 500, 1000 };
+            foreach (var t in turnTargets)
+                if (roundIndex == t && roundMilestonesFired.Add(t))
+                    milestoneToast?.Show($"{t} Shooter Turns This Session", UIFactory.Accent, fontSize: 26);
             currentRound = new CrapsRound(rng);
             foreach (var kv in carriedPlaceBets) currentRound.PlaceBet(kv.Key, kv.Value);
             roundTotalStaked = 0;
@@ -1276,6 +1343,9 @@ public class CrapsBettingUIController : MonoBehaviour
         roundTotalReturned = 0;
         rollCount = 0;
         winStreak = 0;
+        bestRollNet = 0;
+        doubledMilestoneFired = false;
+        roundMilestonesFired.Clear();
         lastLineAmount = 0;
         lastOneRollBets.Clear();
         undoStack.Clear();

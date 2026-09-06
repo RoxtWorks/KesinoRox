@@ -113,21 +113,21 @@ public class BlackjackBettingUIController : MonoBehaviour
         dealerHandUI = new HandUI();
         dealerHandUI.Build(tableRoot, new Vector2(PanelCenterX, 95));
 
-        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -20), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -48), new Vector2(720, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
-        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -20), 20,
-            sizeDelta: new Vector2(500, 34), color: UIFactory.Accent, style: FontStyle.Bold);
+        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -48), 19,
+            sizeDelta: new Vector2(700, 34), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place your bet, then DEAL";
 
-        UIFactory.MakeText(tableRoot, "PlayerLabel", new Vector2(PanelCenterX, -55), 13,
+        UIFactory.MakeText(tableRoot, "PlayerLabel", new Vector2(PanelCenterX, -82), 13,
             TextAnchor.MiddleCenter, new Vector2(200, 20), UIFactory.TextDim, FontStyle.Bold).text = "YOUR HAND";
 
         // First (only, until a split happens) player hand slot.
         var firstHand = new HandUI();
-        firstHand.Build(tableRoot, new Vector2(PanelCenterX, -140));
+        firstHand.Build(tableRoot, new Vector2(PanelCenterX, -165));
         playerHandUIs.Add(firstHand);
 
-        betText = UIFactory.MakeText(tableRoot, "BetText", new Vector2(PanelCenterX, -260), 15,
+        betText = UIFactory.MakeText(tableRoot, "BetText", new Vector2(PanelCenterX, -285), 15,
             sizeDelta: new Vector2(400, 24), color: UIFactory.TextDim);
         betText.text = "Pick a chip, then click the circle below";
 
@@ -139,7 +139,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         betSpotGO.transform.SetParent(tableRoot, false);
         var betSpotRt = betSpotGO.AddComponent<RectTransform>();
         betSpotRt.sizeDelta = new Vector2(160, 160);
-        betSpotRt.anchoredPosition = new Vector2(PanelCenterX, -150);
+        betSpotRt.anchoredPosition = new Vector2(PanelCenterX, -178);
         betSpotFillImg = betSpotGO.AddComponent<Image>();
         betSpotFillImg.sprite = UIFactory.Circle();
         betSpotFillImg.color = new Color(1f, 1f, 1f, 0.06f);
@@ -182,28 +182,28 @@ public class BlackjackBettingUIController : MonoBehaviour
         clearBaseColor = UIFactory.RedBet;
         repeatBaseColor = UIFactory.AccentDim;
 
-        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-170f, ActionButtonY), new Vector2(140, 46),
+        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-183f, ActionButtonY), new Vector2(161, 53),
             "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
-        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, ActionButtonY), new Vector2(160, 54),
-            "DEAL", dealBaseColor, OnDealClicked, 18, pixelFont: true);
-        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(170f, ActionButtonY), new Vector2(140, 46),
+        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, ActionButtonY), new Vector2(184, 62),
+            "DEAL", dealBaseColor, OnDealClicked, 20, pixelFont: true);
+        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(183f, ActionButtonY), new Vector2(161, 53),
             "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
-        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(350f, ActionButtonY), new Vector2(120, 46),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(363f, ActionButtonY), new Vector2(138, 53),
             "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
 
         // Action-phase row: HIT / STAND / DOUBLE / SPLIT / SURRENDER — built here but
         // repositioned and shown/hidden dynamically by LayoutActionButtons(), since
         // which ones apply changes hand to hand.
-        hitButton = UIFactory.MakeButton(tableRoot, "HitBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "HIT", UIFactory.AccentDim, OnHitClicked, 15, pixelFont: true);
-        standButton = UIFactory.MakeButton(tableRoot, "StandBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "STAND", UIFactory.AccentDim, OnStandClicked, 15, pixelFont: true);
-        doubleButton = UIFactory.MakeButton(tableRoot, "DoubleBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "DOUBLE", UIFactory.AccentDim, OnDoubleClicked, 14, pixelFont: true);
-        splitButton = UIFactory.MakeButton(tableRoot, "SplitBtn", new Vector2(0, ActionButtonY), new Vector2(130, 46),
-            "SPLIT", UIFactory.AccentDim, OnSplitClicked, 15, pixelFont: true);
-        surrenderButton = UIFactory.MakeButton(tableRoot, "SurrenderBtn", new Vector2(0, ActionButtonY), new Vector2(140, 46),
-            "SURRENDER", UIFactory.RedBet, OnSurrenderClicked, 12, pixelFont: true);
+        hitButton = UIFactory.MakeButton(tableRoot, "HitBtn", new Vector2(0, ActionButtonY), new Vector2(150, 53),
+            "HIT", UIFactory.AccentDim, OnHitClicked, 17, pixelFont: true);
+        standButton = UIFactory.MakeButton(tableRoot, "StandBtn", new Vector2(0, ActionButtonY), new Vector2(150, 53),
+            "STAND", UIFactory.AccentDim, OnStandClicked, 17, pixelFont: true);
+        doubleButton = UIFactory.MakeButton(tableRoot, "DoubleBtn", new Vector2(0, ActionButtonY), new Vector2(150, 53),
+            "DOUBLE", UIFactory.AccentDim, OnDoubleClicked, 16, pixelFont: true);
+        splitButton = UIFactory.MakeButton(tableRoot, "SplitBtn", new Vector2(0, ActionButtonY), new Vector2(150, 53),
+            "SPLIT", UIFactory.AccentDim, OnSplitClicked, 17, pixelFont: true);
+        surrenderButton = UIFactory.MakeButton(tableRoot, "SurrenderBtn", new Vector2(0, ActionButtonY), new Vector2(161, 53),
+            "SURRENDER", UIFactory.RedBet, OnSurrenderClicked, 13, pixelFont: true);
 
         foreach (var btn in new[] { hitButton, standButton, doubleButton, splitButton, surrenderButton })
             buttonWasVisible[btn] = false;
@@ -323,7 +323,8 @@ public class BlackjackBettingUIController : MonoBehaviour
     void OnClearBetClicked()
     {
         if (roundActive) return;
-        if (pendingBet > 0) PushUndoSnapshot();
+        if (pendingBet <= 0) { statusText.text = "Nothing to clear"; FlashBlocked(); return; }
+        PushUndoSnapshot();
         pendingBet = 0;
         soundManager?.PlayClick();
         ClearBetChipVisuals();
@@ -619,12 +620,12 @@ public class BlackjackBettingUIController : MonoBehaviour
         bool anyBlackjack = results.Any(r => r.outcome == BlackjackOutcome.PlayerBlackjack);
         bool anyBust = results.Any(r => r.outcome == BlackjackOutcome.Bust);
 
-        statusText.color = net >= 0 ? UIFactory.Positive : UIFactory.Negative;
+        statusText.color = net > 0 ? UIFactory.Positive : net < 0 ? UIFactory.Negative : UIFactory.Accent;
         string outcomeLabel = results.Count == 1 ? DescribeOutcome(results[0].outcome) : "Round resolved";
         string flavor = net > 0 ? WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)]
             : net < 0 ? LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)]
             : "Press DEAL again";
-        statusText.text = $"{outcomeLabel}  ({(net >= 0 ? "+" : "")}{net})  — {flavor}";
+        statusText.text = $"{outcomeLabel}  ({(net >= 0 ? "+" : "")}{UIFactory.FormatMoney(net)})  — {flavor}";
 
         if (net > 0)
         {
@@ -638,11 +639,26 @@ public class BlackjackBettingUIController : MonoBehaviour
                 juiceManager?.PlayMoneyFountain(Vector2.zero);
                 floatingText?.Show($"BLACKJACK! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
             }
-            else
+            else if (net >= ChipDenominations.Values[2]) // $500+ (e.g. large split)
             {
-                juiceManager?.Shake(0.35f, 2.5f);
+                juiceManager?.Shake(0.5f, 4f);
+                juiceManager?.Flash(new Color(0.3f, 1f, 0.4f, 0.28f), 0.7f);
+                juiceManager?.PlayConfetti(2f);
+                juiceManager?.PulseLight(0.9f, 0.7f);
+                juiceManager?.PlayMoneyFountain(Vector2.zero);
+                floatingText?.Show($"HUGE WIN! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
+            }
+            else if (net >= ChipDenominations.Values[0] * 4L) // $100+
+            {
+                juiceManager?.Shake(0.3f, 2f);
                 juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.18f), 0.5f);
                 juiceManager?.PlayConfetti();
+                floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
+            }
+            else
+            {
+                juiceManager?.MicroShake(1.3f);
+                juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.1f), 0.3f);
                 floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
             }
             winStreak++;
@@ -660,8 +676,10 @@ public class BlackjackBettingUIController : MonoBehaviour
             floatingText?.Show("PUSH", UIFactory.Accent);
             // Push is neither a win nor a loss — win streak carries through unchanged.
         }
-        streakAnimator.SetText(winStreak >= 2 ? $"<wave><rainb>{winStreak} WIN STREAK</rainb></wave>" : "");
-        streakBadgeGO.SetActive(winStreak >= 2);
+        bool showStreak = winStreak >= 2;
+        streakAnimator.SetText(showStreak ? $"<wave><rainb>{winStreak} WIN STREAK</rainb></wave>" : "");
+        streakBadgeGO.SetActive(showStreak);
+        if (showStreak) JuiceTweens.Pulse(this, (RectTransform)streakBadgeGO.transform, peakScale: 1.15f, duration: 0.3f);
 
         int playerFinalTotal = currentRound.PlayerHands.Count > 0 ? currentRound.PlayerHands[0].BestTotal : 0;
         var record = new BlackjackRoundRecord(roundIndex, playerFinalTotal, currentRound.Dealer.BestTotal,
@@ -721,7 +739,7 @@ public class BlackjackBettingUIController : MonoBehaviour
         if (net > 0 && net > bestRoundNet && roundIndex >= 2)
         {
             bestRoundNet = net;
-            ShowAchievement($"BEST WIN: +{net}!");
+            ShowAchievement($"BEST WIN: +{UIFactory.FormatMoney(net)}!");
         }
         else if (net > bestRoundNet)
         {

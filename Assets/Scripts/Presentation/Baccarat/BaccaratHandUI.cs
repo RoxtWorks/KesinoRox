@@ -10,7 +10,7 @@ using UnityEngine.UI;
 // decisions mid-hand.
 public class BaccaratHandUI
 {
-    const float CardSpacing = 46f;
+    const float CardSpacing = 72f;
     static readonly Vector2 CardSize = new Vector2(64f, 90f);
     static readonly Color NaturalGold = new Color(0.85f, 0.68f, 0.21f);
 

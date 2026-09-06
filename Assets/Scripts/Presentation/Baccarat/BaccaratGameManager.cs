@@ -1,11 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Baccarat's equivalent of GameManager/BlackjackGameManager — same thin-orchestrator
+// Baccarat's equivalent of GameManager/BlackjackGameManager â€” same thin-orchestrator
 // composition pattern: builds the scene/UI procedurally at runtime and wires
 // Presentation controllers to Core session objects. Reuses BlackjackTableBuilder
-// unchanged for the 3D felt backdrop — it's already generic set-dressing with no
+// unchanged for the 3D felt backdrop â€” it's already generic set-dressing with no
 // blackjack-specific coupling, so cloning it here would just be duplication.
 public class BaccaratGameManager : MonoBehaviour
 {
@@ -124,9 +124,9 @@ public class BaccaratGameManager : MonoBehaviour
             "counts (e.g. 7+8=15 counts as 5).\n\n" +
             "PLAYER pays 1:1. BANKER pays 0.95:1 (a 5% commission\n" +
             "applies since Banker has the statistical edge). TIE pays\n" +
-            "8:1 — and a Tie also pushes any Player/Banker bet back.\n\n" +
+            "8:1 â€” and a Tie also pushes any Player/Banker bet back.\n\n" +
             "A third card is drawn automatically for either hand\n" +
-            "under fixed rules — there are no player decisions once\n" +
+            "under fixed rules â€” there are no player decisions once\n" +
             "you hit DEAL.\n\n" +
             "Shoe reshuffles automatically once it runs low.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
@@ -139,13 +139,13 @@ public class BaccaratGameManager : MonoBehaviour
         juiceManager.Build(canvasGO.transform, cameraTransform, Vector3.up * 1f, keyLight);
 
         floatingText = gameObject.AddComponent<FloatingTextUI>();
-        // Was pinned at 460, almost against the HUD panel above — floating win/loss
+        // Was pinned at 460, almost against the HUD panel above â€” floating win/loss
         // text landed way up at the top edge instead of near the action. Centered
         // over the table, just above its header, instead.
         floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
-        milestoneToast.Build(canvasGO.transform, new Vector2(0, 250));
+        milestoneToast.Build(canvasGO.transform, new Vector2(0, 390));
 
         hud = gameObject.AddComponent<BankrollHudUI>();
         hud.Build(canvasGO.transform, bankroll,
@@ -162,7 +162,7 @@ public class BaccaratGameManager : MonoBehaviour
                 {
                     int wins = sessionRecords.Count(r => r.NetChange > 0);
                     long biggest = sessionRecords.Max(r => r.NetChange);
-                    string bestPart = biggest > 0 ? $", best +{biggest}" : "";
+                    string bestPart = biggest > 0 ? $", best +{UIFactory.FormatMoney(biggest)}" : "";
                     milestoneToast.Show($"Session: {sessionRecords.Count} hands, {wins} wins{bestPart}", UIFactory.Accent, fontSize: 26);
                 }
 
@@ -239,3 +239,4 @@ public class BaccaratGameManager : MonoBehaviour
         if (bankroll != null) BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
     }
 }
+

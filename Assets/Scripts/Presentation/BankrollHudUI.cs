@@ -26,7 +26,7 @@ public class BankrollHudUI : MonoBehaviour
         // Tall enough to actually enclose the input/button row with real margin —
         // the crisp sharp-frame border makes any overlap far more visible than the
         // old soft Outline effect ever did.
-        UIFactory.MakeFramedPanel(canvas, "HudPanelBg", new Vector2(0, 465), new Vector2(620, 130), UIFactory.PanelDarker);
+        UIFactory.MakeFramedPanel(canvas, "HudPanelBg", new Vector2(0, 465), new Vector2(620, 160), UIFactory.PanelDarker);
 
         hudText = UIFactory.MakeText(canvas, "BankrollHud", new Vector2(0, 480), 24,
             sizeDelta: new Vector2(600, 40), color: UIFactory.TextLight, style: FontStyle.Bold);

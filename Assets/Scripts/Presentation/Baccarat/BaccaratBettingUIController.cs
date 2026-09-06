@@ -27,6 +27,10 @@ public class BaccaratBettingUIController : MonoBehaviour
     bool roundActive;
     int roundIndex;
     int winStreak;
+    long bestRoundNet;
+    bool doubledMilestoneFired;
+    bool dealWasEnabled;
+    readonly HashSet<int> roundMilestonesFired = new HashSet<int>();
 
     TextMeshProUGUI streakText;
     TextAnimator_TMP streakAnimator;
@@ -104,15 +108,15 @@ public class BaccaratBettingUIController : MonoBehaviour
         bankerHandUI = new BaccaratHandUI();
         bankerHandUI.Build(tableRoot, new Vector2(170, 90));
 
-        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -20), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -20), new Vector2(720, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
-        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -20), 20,
-            sizeDelta: new Vector2(500, 34), color: UIFactory.Accent, style: FontStyle.Bold);
+        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -20), 19,
+            sizeDelta: new Vector2(700, 34), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place bets, then DEAL";
 
-        BuildBetSpot(BaccaratBetType.Player, new Vector2(-220, -140), UIFactory.Positive);
-        BuildBetSpot(BaccaratBetType.Tie, new Vector2(0, -140), new Color(0.55f, 0.45f, 0.15f));
-        BuildBetSpot(BaccaratBetType.Banker, new Vector2(220, -140), UIFactory.Negative);
+        BuildBetSpot(BaccaratBetType.Player, new Vector2(-260, -140), UIFactory.Positive,    new Vector2(280, 110));
+        BuildBetSpot(BaccaratBetType.Tie,    new Vector2(   0, -140), new Color(0.55f, 0.45f, 0.15f), new Vector2(200, 110));
+        BuildBetSpot(BaccaratBetType.Banker, new Vector2( 260, -140), UIFactory.Negative,   new Vector2(280, 110));
 
         BuildActionButtons();
         BuildStreakBadge();
@@ -154,40 +158,36 @@ public class BaccaratBettingUIController : MonoBehaviour
         streakBadgeGO.SetActive(false);
     }
 
-    void BuildBetSpot(BaccaratBetType type, Vector2 pos, Color accentColor)
+    void BuildBetSpot(BaccaratBetType type, Vector2 pos, Color accentColor, Vector2 size)
     {
         var go = new GameObject($"BetSpot_{type}");
         go.transform.SetParent(tableRoot, false);
         var rt = go.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(130, 130);
+        rt.sizeDelta = size;
         rt.anchoredPosition = pos;
         var fill = go.AddComponent<Image>();
-        fill.sprite = UIFactory.Circle();
+        fill.sprite = UIFactory.RoundedRect();
+        fill.type = Image.Type.Sliced;
         fill.color = new Color(1f, 1f, 1f, 0.06f);
-        UIFactory.AddSharpFrame(go, accentColor, square: false);
+        UIFactory.AddSharpFrame(go, accentColor, square: true);
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = fill;
         btn.onClick.AddListener(() => OnSpotClicked(type));
 
-        // Pinned above center, clear of where the chip pile climbs to (see
-        // AddBetChipVisual's clamped fanY) — a stack used to end up covering
-        // centered text instead of sitting visibly below it.
-        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, 26), 16,
-            sizeDelta: new Vector2(110, 50), color: UIFactory.TextDim, style: FontStyle.Bold);
+        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, 22), 16,
+            sizeDelta: new Vector2(size.x - 20, 50), color: UIFactory.TextDim, style: FontStyle.Bold);
         amountText.text = type.ToString().ToUpperInvariant();
+        amountText.alignment = TextAnchor.MiddleCenter;
         var amountShadow = amountText.gameObject.AddComponent<Shadow>();
         amountShadow.effectColor = new Color(0, 0, 0, 0.85f);
         amountShadow.effectDistance = new Vector2(1, -1);
 
         string payoutLabel = type == BaccaratBetType.Tie ? "PAYS 8:1"
             : type == BaccaratBetType.Banker ? "PAYS 0.95:1" : "PAYS 1:1";
-        // Pulled in from -46 to -34 — right at the circle's edge it sat on top of
-        // the ring stroke itself (same hue as the accent color), which read as
-        // "missing" rather than just dim. Hidden entirely once chips are stacked
-        // on the spot (see RefreshBetDisplay) instead of fighting the pile for space.
-        var payoutText = UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, -34), 11,
-            sizeDelta: new Vector2(110, 16), color: UIFactory.TextDim, style: FontStyle.Normal);
+        var payoutText = UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, -28), 14,
+            sizeDelta: new Vector2(size.x - 20, 22), color: UIFactory.TextDim, style: FontStyle.Normal);
         payoutText.text = payoutLabel;
+        payoutText.alignment = TextAnchor.MiddleCenter;
         var payoutShadow = payoutText.gameObject.AddComponent<Shadow>();
         payoutShadow.effectColor = new Color(0, 0, 0, 0.85f);
         payoutShadow.effectDistance = new Vector2(1, -1);
@@ -202,13 +202,13 @@ public class BaccaratBettingUIController : MonoBehaviour
         dealBaseColor = UIFactory.Positive;
         repeatBaseColor = UIFactory.AccentDim;
 
-        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-170f, y), new Vector2(140, 46),
+        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-183f, y), new Vector2(161, 53),
             "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
-        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, y), new Vector2(160, 54),
-            "DEAL", dealBaseColor, OnDealClicked, 18, pixelFont: true);
-        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(170f, y), new Vector2(140, 46),
+        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, y), new Vector2(184, 62),
+            "DEAL", dealBaseColor, OnDealClicked, 20, pixelFont: true);
+        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(183f, y), new Vector2(161, 53),
             "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
-        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(350f, y), new Vector2(120, 46),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(-363f, y), new Vector2(138, 53),
             "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
     }
 
@@ -243,7 +243,8 @@ public class BaccaratBettingUIController : MonoBehaviour
     void OnClearBetClicked()
     {
         if (roundActive) return;
-        if (pendingBets.Values.Sum() > 0) PushUndoSnapshot();
+        if (pendingBets.Values.Sum() <= 0) { statusText.text = "Nothing to clear"; FlashBlocked(); return; }
+        PushUndoSnapshot();
         foreach (var t in spots.Keys.ToList()) pendingBets[t] = 0;
         soundManager?.PlayClick();
         foreach (var spot in spots.Values) ClearBetChipVisuals(spot);
@@ -427,12 +428,12 @@ public class BaccaratBettingUIController : MonoBehaviour
         long net = totalReturned - totalStaked;
         bool tieBetWon = lastBets.TryGetValue(BaccaratBetType.Tie, out long tieBet) && tieBet > 0 && currentRound.Outcome == BaccaratOutcome.Tie;
 
-        statusText.color = net >= 0 ? UIFactory.Positive : UIFactory.Negative;
+        statusText.color = net > 0 ? UIFactory.Positive : net < 0 ? UIFactory.Negative : UIFactory.Accent;
         string outcomeLabel = DescribeOutcome(currentRound.Outcome);
         string flavor = net > 0 ? WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)]
             : net < 0 ? LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)]
             : "Press DEAL again";
-        statusText.text = $"{outcomeLabel}  ({(net >= 0 ? "+" : "")}{net})  — {flavor}";
+        statusText.text = $"{outcomeLabel}  ({(net >= 0 ? "+" : "")}{UIFactory.FormatMoney(net)})  — {flavor}";
 
         if (net > 0)
         {
@@ -446,14 +447,38 @@ public class BaccaratBettingUIController : MonoBehaviour
                 juiceManager?.PlayMoneyFountain(Vector2.zero);
                 floatingText?.Show($"TIE PAYS 8:1! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
             }
-            else
+            else if (net >= ChipDenominations.Values[2]) // $500+
             {
-                juiceManager?.Shake(0.35f, 2.5f);
+                juiceManager?.Shake(0.5f, 4f);
+                juiceManager?.Flash(new Color(0.3f, 1f, 0.4f, 0.28f), 0.7f);
+                juiceManager?.PlayConfetti(2f); juiceManager?.PulseLight(0.9f, 0.7f);
+                juiceManager?.PlayMoneyFountain(Vector2.zero);
+                floatingText?.Show($"HUGE WIN! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
+            }
+            else if (net >= ChipDenominations.Values[0] * 4L) // $100+
+            {
+                juiceManager?.Shake(0.3f, 2f);
                 juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.18f), 0.5f);
                 juiceManager?.PlayConfetti();
                 floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
             }
+            else
+            {
+                juiceManager?.MicroShake(1.3f);
+                juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.1f), 0.3f);
+                floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
+            }
             winStreak++;
+            if (!doubledMilestoneFired && bankroll.TotalFunded > 0 && bankroll.Balance >= bankroll.TotalFunded * 2)
+            { doubledMilestoneFired = true; milestoneToast?.Show("BANKROLL DOUBLED!", UIFactory.Accent, fontSize: 30); }
+            if (winStreak == 5 || winStreak == 10 || winStreak == 15 || winStreak == 20)
+                milestoneToast?.Show($"{winStreak} WIN STREAK!", new Color(1f, 0.85f, 0.2f), fontSize: 30);
+            if (net > bestRoundNet && roundIndex >= 2)
+            {
+                bestRoundNet = net;
+                milestoneToast?.Show($"BEST WIN: +{UIFactory.FormatMoney(net)}!", UIFactory.Positive, fontSize: 26);
+            }
+            else if (net > bestRoundNet) { bestRoundNet = net; }
         }
         else if (net < 0)
         {
@@ -465,16 +490,23 @@ public class BaccaratBettingUIController : MonoBehaviour
         }
         else
         {
+            soundManager?.PlayClick();
             floatingText?.Show("PUSH", UIFactory.Accent);
             // Push is neither a win nor a loss — streak carries through unchanged.
         }
-        streakAnimator.SetText(winStreak >= 2 ? $"<wave><rainb>{winStreak} WIN STREAK</rainb></wave>" : "");
-        streakBadgeGO.SetActive(winStreak >= 2);
+        bool showStreak = winStreak >= 2;
+        streakAnimator.SetText(showStreak ? $"<wave><rainb>{winStreak} WIN STREAK</rainb></wave>" : "");
+        streakBadgeGO.SetActive(showStreak);
+        if (showStreak) JuiceTweens.Pulse(this, (RectTransform)streakBadgeGO.transform, peakScale: 1.15f, duration: 0.3f);
 
         var record = new BaccaratRoundRecord(roundIndex, currentRound.Player.Point, currentRound.Banker.Point,
             currentRound.Outcome, totalStaked, totalReturned, bankroll.Balance);
         onRoundResolved?.Invoke(record);
         roundIndex++;
+        int[] handTargets = { 50, 100, 250, 500, 1000 };
+        foreach (var t in handTargets)
+            if (roundIndex == t && roundMilestonesFired.Add(t))
+                milestoneToast?.Show($"{t} Hands This Session", UIFactory.Accent, fontSize: 26);
 
         roundActive = false;
         RefreshBetDisplay(); // bet spots reappear right away; the finished hand stays up until the next deal
@@ -507,10 +539,13 @@ public class BaccaratBettingUIController : MonoBehaviour
     void RefreshActionButtons()
     {
         long total = pendingBets.Values.Sum();
-        UIFactory.SetButtonState(dealButton, dealBaseColor, !roundActive && total > 0);
+        bool canDeal = !roundActive && total > 0;
+        UIFactory.SetButtonState(dealButton, dealBaseColor, canDeal);
         UIFactory.SetButtonState(clearBetButton, clearBaseColor, !roundActive && total > 0);
         UIFactory.SetButtonState(repeatButton, repeatBaseColor, !roundActive && lastBets.Values.Sum() > 0);
         UIFactory.SetButtonState(undoButton, UIFactory.AccentDim, !roundActive && undoStack.Count > 0);
+        if (canDeal && !dealWasEnabled) JuiceTweens.Pulse(this, dealButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.25f);
+        dealWasEnabled = canDeal;
     }
 
     public void SetRoundIndex(int index) => roundIndex = index;
@@ -520,6 +555,9 @@ public class BaccaratBettingUIController : MonoBehaviour
         currentRound = null;
         roundActive = false;
         winStreak = 0;
+        bestRoundNet = 0;
+        doubledMilestoneFired = false;
+        roundMilestonesFired.Clear();
         streakBadgeGO.SetActive(false);
         undoStack.Clear();
         foreach (var t in spots.Keys.ToList()) { pendingBets[t] = 0; lastBets[t] = 0; }

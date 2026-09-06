@@ -39,20 +39,27 @@ public class GameSwitcherPanel : MonoBehaviour
         UIFactory.MakeHeroTitle(panelRoot.transform, "SwitcherTitle", new Vector2(0, 260), "CHOOSE A GAME", 30);
 
         var others = GameCatalog.Games.Where(g => g.SceneName != currentSceneName).ToList();
-        const float buttonWidth = 280f, gap = 40f;
-        float totalWidth = others.Count * buttonWidth + (others.Count - 1) * gap;
-        float startX = -totalWidth / 2f + buttonWidth / 2f;
+        const float buttonWidth = 260f, gap = 32f;
+        const int perRow = 4;
+        int rows = Mathf.CeilToInt(others.Count / (float)perRow);
+        float rowHeight = 120f;
+        float startY = (rows - 1) * rowHeight / 2f - 20f;
 
         for (int i = 0; i < others.Count; i++)
         {
+            int row = i / perRow;
+            int col = i % perRow;
+            int rowCount = Mathf.Min(perRow, others.Count - row * perRow);
+            float rowWidth = rowCount * buttonWidth + (rowCount - 1) * gap;
+            float startX = -rowWidth / 2f + buttonWidth / 2f;
+            var pos = new Vector2(startX + col * (buttonWidth + gap), startY - row * rowHeight);
             var entry = others[i];
-            var pos = new Vector2(startX + i * (buttonWidth + gap), -20);
-            UIFactory.MakeButton(panelRoot.transform, $"SwitchTo_{entry.SceneName}", pos, new Vector2(buttonWidth, 110),
+            UIFactory.MakeButton(panelRoot.transform, $"SwitchTo_{entry.SceneName}", pos, new Vector2(buttonWidth, 100),
                 entry.DisplayName, entry.Color, () =>
                 {
                     Hide();
                     SceneTransition.Load(entry.SceneName);
-                }, 22, pixelFont: true);
+                }, 20, pixelFont: true);
         }
 
         panelRoot.SetActive(false);

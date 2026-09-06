@@ -33,6 +33,7 @@ public class BettingUIController : MonoBehaviour
     static readonly string[] LoseFlavors = { "Press SPIN again", "Try again", "Onward", "Next one's yours", "Spin again" };
     bool doubledMilestoneFired;
     readonly HashSet<int> spinMilestonesFired = new HashSet<int>();
+    long bestSpinNet;
 
     // Used when restoring a save — continues numbering spins from where the saved
     // session left off instead of restarting at #1.
@@ -157,10 +158,10 @@ public class BettingUIController : MonoBehaviour
         UIFactory.MakePanel(tableRoot, "BettingPanelBg", new Vector2(PanelCenterX, -90), new Vector2(TotalWidth + 60, 710), UIFactory.PanelDark);
         UIFactory.MakeHeroTitle(tableRoot, "Header_BettingTable", new Vector2(PanelCenterX, 195), "BETTING TABLE", 26);
 
-        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(520, 40), UIFactory.PanelDark, shadow: false);
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(720, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
-        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 155), 20,
-            sizeDelta: new Vector2(500, 34), color: UIFactory.Accent, style: FontStyle.Bold);
+        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, 155), 19,
+            sizeDelta: new Vector2(700, 34), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place bets, then SPIN";
 
         // Standalone badge up by the balance HUD instead of buried in the betting
@@ -243,19 +244,19 @@ public class BettingUIController : MonoBehaviour
         // Bottom row: UNDO / CLEAR / SPIN / REPEAT / DOUBLE ALL. UNDO and DOUBLE ALL
         // sit outside the original CLEAR/SPIN/REPEAT trio with room to spare — the
         // felt panel is wide enough that this doesn't crowd anything.
-        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(PanelCenterX - 390, bottomY), new Vector2(120, 46),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(PanelCenterX - 378, bottomY), new Vector2(138, 53),
             "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
 
-        clearBetsButton = UIFactory.MakeButton(tableRoot, "ClearBetsBtn", new Vector2(PanelCenterX - 210, bottomY), new Vector2(150, 46),
+        clearBetsButton = UIFactory.MakeButton(tableRoot, "ClearBetsBtn", new Vector2(PanelCenterX - 212, bottomY), new Vector2(173, 53),
             "CLEAR BETS", UIFactory.RedBet, ClearBets, 14, pixelFont: true);
 
-        spinButton = UIFactory.MakeButton(tableRoot, "SpinButton", new Vector2(PanelCenterX, bottomY), new Vector2(200, 54),
-            "SPIN", UIFactory.Positive, TrySpin, 20, pixelFont: true);
+        spinButton = UIFactory.MakeButton(tableRoot, "SpinButton", new Vector2(PanelCenterX, bottomY), new Vector2(230, 62),
+            "SPIN", UIFactory.Positive, TrySpin, 22, pixelFont: true);
 
-        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(PanelCenterX + 210, bottomY), new Vector2(150, 46),
+        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(PanelCenterX + 212, bottomY), new Vector2(173, 53),
             "REPEAT BET", UIFactory.AccentDim, RepeatLastBet, 14, pixelFont: true);
 
-        doubleAllButton = UIFactory.MakeButton(tableRoot, "DoubleAllBtn", new Vector2(PanelCenterX + 390, bottomY), new Vector2(140, 46),
+        doubleAllButton = UIFactory.MakeButton(tableRoot, "DoubleAllBtn", new Vector2(PanelCenterX + 389, bottomY), new Vector2(161, 53),
             "DOUBLE ALL", UIFactory.AccentDim, DoubleAllBets, 13, pixelFont: true);
 
         RefreshBetTray();
@@ -535,7 +536,8 @@ public class BettingUIController : MonoBehaviour
     void ClearBets()
     {
         if (belt.IsPlaying) return;
-        if (pendingBets.Count > 0) PushUndoSnapshot();
+        if (pendingBets.Count == 0) { statusText.text = "Nothing to clear"; FlashBlocked(); return; }
+        PushUndoSnapshot();
         pendingBets.Clear();
         ClearChipVisuals();
         RefreshBetTray();
@@ -574,6 +576,7 @@ public class BettingUIController : MonoBehaviour
         RefreshBetTray();
         RecalculatePotentials();
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, repeatButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
     }
 
     // Doubles every currently pending bet's stake in one click — a common progression
@@ -606,6 +609,7 @@ public class BettingUIController : MonoBehaviour
         RefreshBetTray();
         RecalculatePotentials();
         soundManager?.PlayChip();
+        JuiceTweens.Pulse(this, doubleAllButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
     }
 
     void PushUndoSnapshot()
@@ -662,6 +666,7 @@ public class BettingUIController : MonoBehaviour
         achievementBadgeGO?.SetActive(false);
         doubledMilestoneFired = false;
         spinMilestonesFired.Clear();
+        bestSpinNet = 0;
     }
 
     // Drops (or updates) a small chip marker directly on the bet spot — the way a real
@@ -806,7 +811,7 @@ public class BettingUIController : MonoBehaviour
             : net > 0 ? WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)]
             : net < 0 ? LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)]
             : "Press SPIN again";
-        statusText.text = $"{winningNumber} {color}  ({(net >= 0 ? "+" : "")}{net})  — {flavor}";
+        statusText.text = $"{winningNumber} {color}  ({(net >= 0 ? "+" : "")}{UIFactory.FormatMoney(net)})  — {flavor}";
 
         var record = new SpinRecord(spinIndex++, winningNumber, totalStake, totalReturned, bankroll.Balance);
         onSpinResolved?.Invoke(record);
@@ -849,6 +854,9 @@ public class BettingUIController : MonoBehaviour
                     floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
                 }
                 winStreak++;
+                if (net > bestSpinNet && spinIndex >= 2)
+                { ShowAchievement($"BEST WIN: +{UIFactory.FormatMoney(net)}!"); bestSpinNet = net; }
+                else if (net > bestSpinNet) { bestSpinNet = net; }
             }
             else if (net < 0)
             {

@@ -127,8 +127,9 @@ public class BaccaratHistoryPanelUI : MonoBehaviour
             string sign = rec.NetChange >= 0 ? "+" : "";
             Color netColor = rec.NetChange > 0 ? UIFactory.Positive : rec.NetChange < 0 ? UIFactory.Negative : UIFactory.TextDim;
             bool tie = rec.Outcome == BaccaratOutcome.Tie;
-            Color playerColor = tie ? UIFactory.Accent : UIFactory.TextDim;
-            Color bankerColor = tie ? UIFactory.Accent : UIFactory.TextDim;
+            Color tieColor = new Color(1f, 0.85f, 0.2f);
+            Color playerColor = tie ? tieColor : UIFactory.TextDim;
+            Color bankerColor = tie ? tieColor : UIFactory.TextDim;
 
             MakeRowText(rowGO.transform, $"{rec.RoundIndex + 1}", 0);
             MakeRowText(rowGO.transform, $"{rec.PlayerPoint}", 1, playerColor, tie ? FontStyle.Bold : FontStyle.Normal);

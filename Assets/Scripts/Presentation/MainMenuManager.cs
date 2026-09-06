@@ -88,7 +88,7 @@ public class MainMenuManager : MonoBehaviour
         creditsPanel = gameObject.AddComponent<RulesPopupUI>();
         creditsPanel.Build(canvasGO.transform, "CREDITS", CreditsText);
 
-        var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 230), 96,
+        var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 300), 96,
             new Vector2(1100, 160), ThemeAccent, FontStyles.Bold);
         title.text = "CASINO SIM";
         title.enableVertexGradient = true;
@@ -97,24 +97,29 @@ public class MainMenuManager : MonoBehaviour
             new Color(0.5f, 0.6f, 0.75f), new Color(0.5f, 0.6f, 0.75f));
 
         var titleRt = title.GetComponent<RectTransform>();
-        titleRt.DOAnchorPosY(240, 1.6f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo)
+        titleRt.DOAnchorPosY(310, 1.6f).SetEase(Ease.InOutSine).SetLoops(-1, LoopType.Yoyo)
             .SetLink(titleRt.gameObject, LinkBehaviour.KillOnDestroy);
 
-        var subtitle = MakePixelText(canvasGO.transform, "SubtitleText", new Vector2(0, 110), 28,
+        var subtitle = MakePixelText(canvasGO.transform, "SubtitleText", new Vector2(0, 175), 28,
             new Vector2(500, 50), TextDim, FontStyles.Normal);
         subtitle.text = "choose a game";
 
-        // Reads GameCatalog instead of one hardcoded button per game — adding a
-        // fourth game later means adding one catalog entry, not a new call here too.
-        const float buttonWidth = 260f, gap = 40f;
+        // 4 × 2 grid — two rows of four, each button a card-sized 360 × 120.
+        const float buttonWidth = 360f, buttonHeight = 120f, gapX = 30f, gapY = 20f;
+        const int cols = 4;
         var games = GameCatalog.Games;
-        float totalWidth = games.Count * buttonWidth + (games.Count - 1) * gap;
+        float totalWidth = cols * buttonWidth + (cols - 1) * gapX;
         float startX = -totalWidth / 2f + buttonWidth / 2f;
+        const float row1Y = 30f, row2Y = row1Y - buttonHeight - gapY;
         for (int i = 0; i < games.Count; i++)
         {
             var entry = games[i];
-            var pos = new Vector2(startX + i * (buttonWidth + gap), -80);
-            MakeGameButton(canvasGO.transform, $"{entry.SceneName}Btn", pos, new Vector2(buttonWidth, 100),
+            int col = i % cols;
+            int row = i / cols;
+            float posY = row == 0 ? row1Y : row2Y;
+            var pos = new Vector2(startX + col * (buttonWidth + gapX), posY);
+            MakeGameButton(canvasGO.transform, $"{entry.SceneName}Btn", pos,
+                new Vector2(buttonWidth, buttonHeight),
                 entry.DisplayName, entry.Color, () => SceneTransition.Load(entry.SceneName));
         }
     }

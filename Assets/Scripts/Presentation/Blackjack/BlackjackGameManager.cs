@@ -1,11 +1,11 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Blackjack's equivalent of GameManager — thin orchestrator, same composition
+// Blackjack's equivalent of GameManager â€” thin orchestrator, same composition
 // pattern: builds the scene/UI procedurally at runtime (no prefabs/serialized
 // fields) and wires Presentation controllers to Core session objects (Bankroll,
-// Shoe). Holds no game rules itself — see Assets/Scripts/Core for that.
+// Shoe). Holds no game rules itself â€” see Assets/Scripts/Core for that.
 public class BlackjackGameManager : MonoBehaviour
 {
     Bankroll bankroll;
@@ -63,7 +63,7 @@ public class BlackjackGameManager : MonoBehaviour
         cam.backgroundColor = new Color(0.015f, 0.02f, 0.03f);
 
         // A camera created via AddComponent at runtime does NOT get an AudioListener
-        // automatically — same gotcha as the roulette scene.
+        // automatically â€” same gotcha as the roulette scene.
         camGO.AddComponent<AudioListener>();
         cameraTransform = camGO.transform;
     }
@@ -106,7 +106,7 @@ public class BlackjackGameManager : MonoBehaviour
         canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
         // Top-right: CLOSE APP (same as roulette). Top-left: nav button back to the
-        // roulette scene — mirrored placement of roulette's own nav button to here.
+        // roulette scene â€” mirrored placement of roulette's own nav button to here.
         UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
             {
@@ -129,12 +129,12 @@ public class BlackjackGameManager : MonoBehaviour
             "Blackjack (natural 21 on your first two cards) pays 3:2.\n" +
             "A normal win pays 1:1. A push returns your bet.\n\n" +
             "Dealer hits on soft 17 and stands on hard 17+.\n\n" +
-            "SPLIT — any pair, up to 4 hands total. Split aces get\n" +
+            "SPLIT â€” any pair, up to 4 hands total. Split aces get\n" +
             "exactly one more card each and can't be re-split or hit.\n" +
-            "DOUBLE — double your bet for exactly one more card.\n" +
+            "DOUBLE â€” double your bet for exactly one more card.\n" +
             "Double-after-split is allowed.\n" +
-            "SURRENDER — forfeit half your bet before hitting.\n" +
-            "INSURANCE — offered only when the dealer shows an Ace;\n" +
+            "SURRENDER â€” forfeit half your bet before hitting.\n" +
+            "INSURANCE â€” offered only when the dealer shows an Ace;\n" +
             "pays 2:1 if the dealer has blackjack.\n\n" +
             "Shoe reshuffles automatically once it runs low.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
@@ -147,13 +147,13 @@ public class BlackjackGameManager : MonoBehaviour
         juiceManager.Build(canvasGO.transform, cameraTransform, Vector3.up * 1f, keyLight);
 
         floatingText = gameObject.AddComponent<FloatingTextUI>();
-        // Was pinned at 460, almost against the HUD panel above — floating win/loss
+        // Was pinned at 460, almost against the HUD panel above â€” floating win/loss
         // text landed way up at the top edge instead of near the action. Centered
         // over the table, just above its header, instead.
         floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
-        milestoneToast.Build(canvasGO.transform, new Vector2(0, 250));
+        milestoneToast.Build(canvasGO.transform, new Vector2(0, 390));
 
         hud = gameObject.AddComponent<BankrollHudUI>();
         hud.Build(canvasGO.transform, bankroll,
@@ -170,7 +170,7 @@ public class BlackjackGameManager : MonoBehaviour
                 {
                     int wins = sessionRecords.Count(r => r.NetChange > 0);
                     long biggest = sessionRecords.Max(r => r.NetChange);
-                    string bestPart = biggest > 0 ? $", best +{biggest}" : "";
+                    string bestPart = biggest > 0 ? $", best +{UIFactory.FormatMoney(biggest)}" : "";
                     milestoneToast.Show($"Session: {sessionRecords.Count} hands, {wins} wins{bestPart}", UIFactory.Accent, fontSize: 26);
                 }
 
@@ -209,7 +209,7 @@ public class BlackjackGameManager : MonoBehaviour
             BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
         });
 
-        // Restore last session, if a save exists — bankroll first, then replay every
+        // Restore last session, if a save exists â€” bankroll first, then replay every
         // saved round through the same AddRecord call a live round uses.
         if (BlackjackSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<BlackjackRoundRecord> loadedRecords))
@@ -237,3 +237,4 @@ public class BlackjackGameManager : MonoBehaviour
         if (bankroll != null) BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
     }
 }
+

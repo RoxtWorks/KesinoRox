@@ -20,5 +20,17 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/Craps.unity
     guid: 9d5d65c571854184998690c5db5f98eb
+  - enabled: 1
+    path: Assets/Scenes/NormalCraps.unity
+    guid: 9267b04b77ad60f4282d4eac327ab64a
+  - enabled: 1
+    path: Assets/Scenes/ThreePictures.unity
+    guid: ad5f5852af48b3d4fa3fa716dcd9fe4e
+  - enabled: 1
+    path: Assets/Scenes/SicBo.unity
+    guid: 858e9bf6a100871488b9ecb053d6e3b5
+  - enabled: 1
+    path: Assets/Scenes/ThreeCardPoker.unity
+    guid: 8a386ebf9eb363047813d88bdad4df85
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0
