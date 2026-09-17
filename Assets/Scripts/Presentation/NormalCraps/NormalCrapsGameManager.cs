@@ -202,8 +202,8 @@ public class NormalCrapsGameManager : MonoBehaviour
             hud.Refresh();
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
+            // History panel is per-roll and session-local; saved records are per shooter turn
             sessionRecords.AddRange(loadedRecords);
-            foreach (var r in loadedRecords) historyPanel.AddRecord(r);
         }
 
         soundManager.PlayMusic();

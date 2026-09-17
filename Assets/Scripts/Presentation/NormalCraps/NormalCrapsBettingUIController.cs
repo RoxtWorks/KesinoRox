@@ -30,6 +30,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     NormalCrapsRound currentRound;
     int roundIndex;
     int rollLogIndex;
+    int pointBeforeRoll;
     long roundTotalStaked;
     long roundTotalReturned;
     int rollCount;
@@ -103,6 +104,9 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
     static readonly Color[] ChipColors = { new Color(0.65f, 0.12f, 0.12f), new Color(0.1f, 0.35f, 0.6f), new Color(0.1f, 0.1f, 0.1f) };
 
+    GameObject shooterPromptRoot;
+    Text shooterPromptTitleText, shooterPromptBetsText;
+
     GameObject oddsModalRoot;
     Text oddsModalTitleText, oddsModalOddsText, oddsModalAmountText, oddsModalCapText;
     Button[] multiplierButtons;
@@ -113,6 +117,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     long oddsModalCap;
     long oddsModalBaseAmount;
     long oddsModalPendingAmount;
+    NormalComeWager oddsModalComeWager;
 
     GameObject pointPuck;
 
@@ -161,6 +166,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         BuildActionButtons();
         BuildStreakBadge();
         BuildOddsModal(canvas);
+        BuildShooterPrompt(canvas);
         RefreshActionButtons();
     }
 
@@ -680,7 +686,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     void OnComeClicked()
     {
         if (rolling) return;
-        // Come bets only allowed in Point phase (or come-out if player wants — casino allows it)
+        if (currentRound.Phase != NormalCrapsPhase.Point) { FlashBlocked(); return; }
         long chip = chipSelector.SelectedChip;
         if (!bankroll.TryWithdraw(chip))
         {
@@ -704,6 +710,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     void OnDontComeClicked()
     {
         if (rolling) return;
+        if (currentRound.Phase != NormalCrapsPhase.Point) { FlashBlocked(); return; }
         long chip = chipSelector.SelectedChip;
         if (!bankroll.TryWithdraw(chip))
         {
@@ -1024,14 +1031,10 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
     void OnRollClicked()
     {
-        if (rolling) return;
-        bool hasBets = currentRound.GetBet(NormalCrapsBetType.PassLine) > 0
-            || currentRound.GetBet(NormalCrapsBetType.DontPass) > 0
-            || currentRound.GetBet(NormalCrapsBetType.Field) > 0
-            || PlaceNumbers.Any(n => currentRound.GetBet(NumberToPlaceType(n)) > 0)
-            || PlaceNumbers.Any(n => currentRound.GetBet(NumberToLayType(n)) > 0)
-            || HardNumbers.Any(n => currentRound.GetBet(NumberToHardType(n)) > 0)
-            || PropTypes.Any(t => currentRound.GetBet(t) > 0);
+        if (rolling || shooterPromptRoot.activeSelf) return;
+        bool hasBets = Enum.GetValues(typeof(NormalCrapsBetType)).Cast<NormalCrapsBetType>().Any(t => currentRound.GetBet(t) > 0)
+            || currentRound.ComeWagers.Any()
+            || currentRound.DontComeWagers.Any();
         if (!hasBets) { statusText.text = "Place at least one bet"; juiceManager?.MicroShake(1.2f); return; }
 
         // Save for REPEAT BET
@@ -1063,6 +1066,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             yield return new WaitUntil(() => presimDone);
         }
 
+        pointBeforeRoll = currentRound.Point ?? 0;
         var result = currentRound.Roll();
 
         if (die1UI != null && die2UI != null && presim != null)
@@ -1082,6 +1086,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     void ApplyRollResult(NormalCrapsRollResult result)
     {
         long returned = result.TotalReturned;
+        long net = returned - result.TotalStaked;
         bankroll.Deposit(returned);
         roundTotalReturned += returned;
         rollCount++;
@@ -1090,16 +1095,16 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
         // Status
         string dice  = $"{result.Die1} + {result.Die2} = {result.Total}";
-        Color sc = returned > 0 ? UIFactory.Positive : UIFactory.Accent;
+        Color sc = result.RoundOver || net < 0 ? UIFactory.Negative : net > 0 ? UIFactory.Positive : UIFactory.Accent;
         string verdict = "";
         if (result.RoundOver)
         {
             verdict = " — SEVEN OUT";
-            // DontPass wins on seven-out — keep positive color when player profited
-            if (returned == 0) sc = UIFactory.Negative;
         }
         else if (result.PointEstablishedThisRoll)
             verdict = $" — POINT: {result.NewPoint}";
+        else if (pointBeforeRoll != 0 && currentRound.Phase == NormalCrapsPhase.ComeOut && !result.PassResolved)
+            verdict = " — POINT MADE";
         else if (result.PassResolved && result.PassReturn > 0)
         {
             // Come-out natural (7 or 11) vs point made (total matches old point)
@@ -1120,23 +1125,32 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         }
 
         // Supplement verdict when no pass-line event but other bets resolved
-        if (verdict == "" && returned > 0)
-        {
-            if (result.HardwayHits.Count > 0)
-                verdict = $" — HARD {result.HardwayHits.Keys.First()}!";
-            else if (result.PlaceHits.Count > 0)
-                verdict = $" — PLACE {result.PlaceHits.Keys.First()} PAYS";
-            else if (result.FieldReturn > 0)
-                verdict = " — FIELD";
-            else if (result.AnyCrapsReturn > 0 || result.AnySevenReturn > 0
-                  || result.AnyElevenReturn > 0 || result.HornReturn > 0)
-                verdict = " — PROP WINS";
-        }
+        string sideWin = "";
+        if (result.HardwayHits.Count > 0)
+            sideWin = $" — HARD {result.HardwayHits.Keys.First()}!";
+        else if (result.PlaceHits.Count > 0)
+            sideWin = $" — PLACE {result.PlaceHits.Keys.First()} PAYS";
+        else if (result.FieldReturn > 0)
+            sideWin = " — FIELD PAYS";
+        else if (result.AnyCrapsReturn > 0 || result.AnySevenReturn > 0
+              || result.AnyElevenReturn > 0 || result.HornReturn > 0)
+            sideWin = " — PROP WINS";
+
+        if (verdict == "" && net > 0)
+            verdict = sideWin;
+        else if (verdict == " — CRAPS" && net > 0)
+            verdict += sideWin;
+        else if (verdict == "" && net < 0)
+            verdict = result.LayLosses.Count > 0 ? $" — LAY {result.LayLosses.Keys.First()} LOSES" : " — BETS LOSE";
+        else if (verdict == "" && result.ComeParked.Count > 0)
+            verdict = $" — COME MOVES TO {result.ComeParked[0].Point}";
+        else if (verdict == "" && result.DontComeParked.Count > 0)
+            verdict = $" — DON'T COME MOVES TO {result.DontComeParked[0].Point}";
 
         string flavor = "";
-        if (returned > 0 && verdict != "")
+        if (!result.RoundOver && net > 0 && verdict != "")
             flavor = "  " + WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)];
-        else if (result.RoundOver && returned == 0)
+        else if (result.RoundOver)
             flavor = "  " + LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)];
 
         statusText.color = sc;
@@ -1146,7 +1160,27 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         RefreshPhaseVisuals();
 
         // Juice
-        if (returned > 0)
+        if (result.RoundOver)
+        {
+            juiceManager?.Shake(0.25f, 1.5f);
+            juiceManager?.Flash(new Color(0.85f, 0.2f, 0.2f, 0.14f), 0.4f);
+            floatingText?.Show("SEVEN OUT", UIFactory.Negative, fontSize: 36);
+            if (net > 0)
+            {
+                soundManager?.PlayWin();
+                winStreak++;
+                if (!doubledMilestoneFired && bankroll.TotalFunded > 0 && bankroll.Balance >= bankroll.TotalFunded * 2)
+                { doubledMilestoneFired = true; milestoneToast?.Show("BANKROLL DOUBLED!", UIFactory.Accent, fontSize: 30); }
+                if (winStreak == 5 || winStreak == 10 || winStreak == 15 || winStreak == 20)
+                    milestoneToast?.Show($"{winStreak} WIN STREAK!", new Color(1f, 0.85f, 0.2f), fontSize: 30);
+            }
+            else
+            {
+                soundManager?.PlayLose();
+                winStreak = 0;
+            }
+        }
+        else if (net > 0)
         {
             soundManager?.PlayWin();
             if (returned >= ChipDenominations.Values[2]) // $500+
@@ -1156,39 +1190,35 @@ public class NormalCrapsBettingUIController : MonoBehaviour
                 juiceManager?.PlayConfetti(2f);
                 juiceManager?.PulseLight(0.9f, 0.7f);
                 juiceManager?.PlayMoneyFountain(Vector2.zero);
-                floatingText?.Show($"HUGE WIN! +{UIFactory.FormatMoney(returned)}", UIFactory.Positive, fontSize: 42);
+                floatingText?.Show($"HUGE WIN! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
             }
             else if (returned >= ChipDenominations.Values[0] * 4L) // $100+
             {
                 juiceManager?.Shake(0.3f, 2f);
                 juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.18f), 0.5f);
                 juiceManager?.PlayConfetti();
-                floatingText?.Show($"+{UIFactory.FormatMoney(returned)}", UIFactory.Positive);
+                floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
             }
             else
             {
                 juiceManager?.MicroShake(1.3f);
                 juiceManager?.Flash(new Color(0.25f, 0.9f, 0.35f, 0.1f), 0.3f);
-                floatingText?.Show($"+{UIFactory.FormatMoney(returned)}", UIFactory.Positive);
+                floatingText?.Show($"+{UIFactory.FormatMoney(net)}", UIFactory.Positive);
             }
             winStreak++;
             if (!doubledMilestoneFired && bankroll.TotalFunded > 0 && bankroll.Balance >= bankroll.TotalFunded * 2)
             { doubledMilestoneFired = true; milestoneToast?.Show("BANKROLL DOUBLED!", UIFactory.Accent, fontSize: 30); }
             if (winStreak == 5 || winStreak == 10 || winStreak == 15 || winStreak == 20)
                 milestoneToast?.Show($"{winStreak} WIN STREAK!", new Color(1f, 0.85f, 0.2f), fontSize: 30);
-            if (returned > bestRoundNet && roundIndex >= 2)
+            if (net > bestRoundNet && roundIndex >= 2)
             {
-                bestRoundNet = returned;
-                milestoneToast?.Show($"BEST WIN: +{UIFactory.FormatMoney(returned)}!", UIFactory.Positive, fontSize: 26);
+                bestRoundNet = net;
+                milestoneToast?.Show($"BEST WIN: +{UIFactory.FormatMoney(net)}!", UIFactory.Positive, fontSize: 26);
             }
-            else if (returned > bestRoundNet) { bestRoundNet = returned; }
+            else if (net > bestRoundNet) { bestRoundNet = net; }
         }
-        else if (result.RoundOver)
+        else if (net < 0)
         {
-            soundManager?.PlayLose();
-            juiceManager?.Shake(0.25f, 1.5f);
-            juiceManager?.Flash(new Color(0.85f, 0.2f, 0.2f, 0.14f), 0.4f);
-            floatingText?.Show("SEVEN OUT", UIFactory.Negative, fontSize: 36);
             winStreak = 0;
         }
 
@@ -1197,15 +1227,17 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         streakBadgeGO?.SetActive(showStreak);
         if (showStreak) JuiceTweens.Pulse(this, (RectTransform)streakBadgeGO.transform, peakScale: 1.15f, duration: 0.3f);
 
-        onRollResolved?.Invoke(result.Total.ToString(), returned > 0 ? UIFactory.Positive : result.RoundOver ? UIFactory.Negative : UIFactory.Accent);
-        var rollRecord = new NormalCrapsRoundRecord(rollLogIndex++, currentRound.Point ?? 0, rollCount,
-            roundTotalStaked, roundTotalReturned, bankroll.Balance, result.Total);
+        onRollResolved?.Invoke(result.Total.ToString(), net > 0 ? UIFactory.Positive : net < 0 ? UIFactory.Negative : UIFactory.Accent);
+        // Per-roll row: Stake column shows the turn's stake so far; NetChange is this roll's net only
+        int rowPoint = pointBeforeRoll != 0 ? pointBeforeRoll : result.NewPoint ?? 0;
+        var rollRecord = new NormalCrapsRoundRecord(rollLogIndex++, rowPoint, rollCount,
+            roundTotalStaked, roundTotalStaked + net, bankroll.Balance, result.Total);
         onRollLogged?.Invoke(rollRecord);
 
         if (result.RoundOver)
         {
             // Shooter turn ended — record for history/save
-            var record = new NormalCrapsRoundRecord(roundIndex, currentRound.Point ?? 0, rollCount,
+            var record = new NormalCrapsRoundRecord(roundIndex, pointBeforeRoll, rollCount,
                 roundTotalStaked, roundTotalReturned, bankroll.Balance, result.Total);
             onRoundResolved?.Invoke(record);
             roundIndex++;
@@ -1216,8 +1248,13 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             roundTotalStaked = 0;
             roundTotalReturned = 0;
             rollCount = 0;
-            currentRound.PlaceBetsWorking = false;
+            if (!TryOpenShooterPrompt("NEW SHOOTER COMING OUT"))
+                currentRound.PlaceBetsWorking = false;
             RefreshBetsToggle();
+        }
+        else if (pointBeforeRoll != 0 && currentRound.Phase == NormalCrapsPhase.ComeOut)
+        {
+            TryOpenShooterPrompt($"POINT {pointBeforeRoll} MADE — COMING OUT");
         }
         else if (result.PointEstablishedThisRoll)
         {
@@ -1269,13 +1306,14 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             if (comeChips.TryGetValue(w, out var chip)) { Destroy(chip); comeChips.Remove(w); }
             if (w.Point.HasValue && placeSpots.TryGetValue(w.Point.Value, out var ps))
                 comeChips[w] = SpawnWagerChip(ps.Root.transform, w.Amount, new Vector2(-30f, 0f));
+            // Prompt for Come odds (same as Pass Line odds prompt on point establishment)
+            if (w.Point.HasValue)
+                OpenComeOddsModal(w);
         }
 
-        // DC wagers: DontComePushed returns stake (not in TotalReturned) — credit manually
+        // Pushed DC stakes are already in result.TotalReturned (deposited at top of method)
         foreach (var w in result.DontComePushed)
         {
-            bankroll.Deposit(w.Amount);
-            roundTotalReturned += w.Amount;
             if (dcChips.TryGetValue(w, out var chip)) { Destroy(chip); dcChips.Remove(w); }
         }
         foreach (var kv in result.DontComeReturns)
@@ -1302,12 +1340,9 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
         if (result.RoundOver)
         {
-            // Place/Lay bets carried over (BETS OFF on seven-out) — keep chip visuals, don't clear
-            if (!result.PlaceBetsCarriedOver)
-            {
-                foreach (var kv in placeSpots) ClearChipVisuals(kv.Value);
-                foreach (var kv in laySpots)   ClearChipVisuals(kv.Value);
-            }
+            // Places are lost only when working; Lay bets win on 7 and always stay on the table
+            foreach (var kv in placeSpots)
+                if (currentRound.GetBet(NumberToPlaceType(kv.Key)) == 0) ClearChipVisuals(kv.Value);
             foreach (var kv in hardSpots) ClearChipVisuals(kv.Value);
         }
 
@@ -1481,8 +1516,83 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         oddsModalRoot.SetActive(false);
     }
 
+    // Dealer check before each come-out: Place/Lay bets are the player's own, separate from the shooter's line bets
+    void BuildShooterPrompt(Transform canvas)
+    {
+        shooterPromptRoot = new GameObject("NCShooterPrompt");
+        shooterPromptRoot.transform.SetParent(canvas, false);
+        var rt = shooterPromptRoot.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        var scrimGO = new GameObject("Scrim");
+        scrimGO.transform.SetParent(shooterPromptRoot.transform, false);
+        var scrimRt = scrimGO.AddComponent<RectTransform>();
+        scrimRt.anchorMin = Vector2.zero;
+        scrimRt.anchorMax = Vector2.one;
+        scrimRt.offsetMin = Vector2.zero;
+        scrimRt.offsetMax = Vector2.zero;
+        scrimGO.AddComponent<Image>().color = new Color(0.02f, 0.02f, 0.03f, 0.85f);
+
+        var panel = UIFactory.MakeFramedPanel(shooterPromptRoot.transform, "NCShooterPromptPanel", Vector2.zero, new Vector2(640, 340), Color.black);
+
+        shooterPromptTitleText = UIFactory.MakeText(panel.transform, "ShooterPromptTitle", new Vector2(0, 120), 26,
+            sizeDelta: new Vector2(600, 36), color: UIFactory.TextLight, style: FontStyle.Bold);
+        UIFactory.MakeText(panel.transform, "ShooterPromptQuestion", new Vector2(0, 62), 22,
+            sizeDelta: new Vector2(600, 34), color: UIFactory.Accent).text = "Dealer: \"Do you want to turn off your bets?\"";
+        shooterPromptBetsText = UIFactory.MakeText(panel.transform, "ShooterPromptBets", new Vector2(0, 5), 16,
+            sizeDelta: new Vector2(600, 56), color: UIFactory.TextDim);
+
+        UIFactory.MakeButton(panel.transform, "NCShooterTurnOff", new Vector2(-125, -100), new Vector2(220, 58),
+            "TURN OFF", UIFactory.AccentDim, () => AnswerShooterPrompt(false), 16, pixelFont: true);
+        UIFactory.MakeButton(panel.transform, "NCShooterKeepOn", new Vector2(125, -100), new Vector2(220, 58),
+            "KEEP ON", UIFactory.Positive, () => AnswerShooterPrompt(true), 16, pixelFont: true);
+
+        shooterPromptRoot.SetActive(false);
+    }
+
+    bool TryOpenShooterPrompt(string title)
+    {
+        var parts = new List<string>();
+        foreach (int n in PlaceNumbers)
+        {
+            long p = currentRound.GetBet(NumberToPlaceType(n));
+            if (p > 0) parts.Add($"Place {n} {UIFactory.FormatMoney(p)}");
+        }
+        foreach (int n in PlaceNumbers)
+        {
+            long l = currentRound.GetBet(NumberToLayType(n));
+            if (l > 0) parts.Add($"Lay {n} {UIFactory.FormatMoney(l)}");
+        }
+        if (parts.Count == 0) return false;
+
+        shooterPromptTitleText.text = title;
+        shooterPromptBetsText.text = "Your bets on the table:\n" + string.Join("  ·  ", parts);
+        shooterPromptRoot.transform.SetAsLastSibling();
+        shooterPromptRoot.SetActive(true);
+        return true;
+    }
+
+    void AnswerShooterPrompt(bool keepWorking)
+    {
+        currentRound.PlaceBetsWorking = keepWorking;
+        shooterPromptRoot.SetActive(false);
+        soundManager?.PlayClick();
+        RefreshActionButtons();
+    }
+
+    void OpenComeOddsModal(NormalComeWager w)
+    {
+        int point = w.Point.Value;
+        OpenOddsModal(NormalCrapsBetType.PassOdds, $"COME ODDS — {point}", point, w.Amount, isDontSide: false);
+        oddsModalComeWager = w; // set after OpenOddsModal clears it
+    }
+
     void OpenOddsModal(NormalCrapsBetType betType, string title, int point, long baseAmount, bool isDontSide)
     {
+        oddsModalComeWager = null; // clear Come context when opening for Pass/DontPass
         oddsModalBetType = betType;
         oddsModalPoint = point;
         oddsModalIsDontSide = isDontSide;
@@ -1557,8 +1667,16 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         if (amount <= 0) { HideOddsModal(); return; }
         if (!bankroll.TryWithdraw(amount)) { FlashBlocked(); HideOddsModal(); return; }
 
-        currentRound.PlaceBet(oddsModalBetType, amount);
-        PushUndoBet(oddsModalBetType, amount);
+        if (oddsModalComeWager != null)
+        {
+            currentRound.AddComeOdds(oddsModalComeWager, amount);
+            oddsModalComeWager = null;
+        }
+        else
+        {
+            currentRound.PlaceBet(oddsModalBetType, amount);
+            PushUndoBet(oddsModalBetType, amount);
+        }
         roundTotalStaked += amount;
 
         soundManager?.PlayChip();
@@ -1598,6 +1716,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         streakBadgeGO?.SetActive(false);
         pointPuck.SetActive(false);
         currentRound = new NormalCrapsRound(rng);
+        shooterPromptRoot.SetActive(false);
         ClearChipVisuals(passSpot);
         ClearChipVisuals(dontPassSpot);
         ClearChipVisuals(fieldSpot);

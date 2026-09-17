@@ -140,7 +140,7 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
             emptyGO.transform.SetParent(content, false);
             var t = UIFactory.MakeText(emptyGO.transform, "Text", Vector2.zero, 14,
                 TextAnchor.UpperLeft, new Vector2(ContentWidth, RowHeight), UIFactory.TextDim);
-            t.text = "No turns yet";
+            t.text = "No rolls yet";
             rowObjects.Add(emptyGO);
         }
     }

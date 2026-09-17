@@ -60,11 +60,16 @@ public class NormalCrapsRollResult
     public long AtsAllReturn;    // 0 or stake*156
     public bool AtsSevenOut;     // 7 in point phase → ATS bets lost
 
+    // All bet stakes consumed/resolved this roll (wins + losses).
+    // net = TotalReturned - TotalStaked = true profit/loss per roll.
+    public long TotalStaked;
+
     public long TotalReturned =>
         FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn
         + PlaceHits.Values.Sum() + HardwayHits.Values.Sum()
         + LayHits.Values.Sum()
         + ComeReturns.Values.Sum() + PassReturn + DontPassReturn
         + DontComeReturns.Values.Sum()
+        + DontComePushed.Sum(w => w.Amount)
         + AtsLowsReturn + AtsHighsReturn + AtsAllReturn;
 }

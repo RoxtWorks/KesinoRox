@@ -6,11 +6,11 @@ public static class NormalCrapsResolver
     // Standard craps point numbers — 2/3/11/12 are NOT points; they crap out.
     public static bool IsPointNumber(int total) => total is 4 or 5 or 6 or 8 or 9 or 10;
 
-    // Field: wins on 2(2:1), 3/4/9/10/11(1:1), 12(2:1). Loses 5/6/7/8.
-    // Standard casino field; some pay 12 at 3:1 but 2:1 is most common.
+    // Field: 2 pays 2:1, 12 pays 3:1 (Las Vegas standard), 3/4/9/10/11 pay 1:1. Loses 5/6/7/8.
     public static long FieldPayout(long stake, int total) => total switch
     {
-        2 or 12 => stake * 3,
+        2  => stake * 3,
+        12 => stake * 4,
         3 or 4 or 9 or 10 or 11 => stake * 2,
         _ => 0
     };

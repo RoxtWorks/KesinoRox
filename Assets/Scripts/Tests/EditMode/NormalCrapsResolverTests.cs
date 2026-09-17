@@ -4,7 +4,7 @@ public class NormalCrapsResolverTests
 {
     // ── Field ────────────────────────────────────────────────────────────────
     [TestCase(2,  300)] // 2:1
-    [TestCase(12, 300)] // 2:1
+    [TestCase(12, 400)] // 3:1 (Las Vegas standard)
     [TestCase(3,  200)] // 1:1
     [TestCase(4,  200)]
     [TestCase(9,  200)]
@@ -72,16 +72,16 @@ public class NormalCrapsResolverTests
     public void AnyEleven_Correct(int total, long expected)
         => Assert.AreEqual(expected, NormalCrapsResolver.AnyElevenPayout(100, total));
 
-    // ── Lay bet payout (stake stays, winnings returned with stake) ────────────
-    // Against 4/10 (true odds 2:1): risk 100, win 50 → returned 150
-    [TestCase(4,  150)]
-    [TestCase(10, 150)]
-    // Against 5/9 (true odds 3:2): risk 100, win 66 → returned 166
-    [TestCase(5,  166)]
-    [TestCase(9,  166)]
-    // Against 6/8 (true odds 6:5): risk 100, win 83 → returned 183
-    [TestCase(6,  183)]
-    [TestCase(8,  183)]
+    // ── Lay bet payout (winnings only — stake stays on table, Option 2) ─────────
+    // Against 4/10 (true odds 2:1): risk 100, win 50 (winnings only)
+    [TestCase(4,   50)]
+    [TestCase(10,  50)]
+    // Against 5/9 (true odds 3:2): risk 100, win 66
+    [TestCase(5,   66)]
+    [TestCase(9,   66)]
+    // Against 6/8 (true odds 6:5): risk 100, win 83
+    [TestCase(6,   83)]
+    [TestCase(8,   83)]
     public void LayBet_Payout_Correct(int number, long expected)
         => Assert.AreEqual(expected, NormalCrapsResolver.LayBetPayout(100, number));
 }
