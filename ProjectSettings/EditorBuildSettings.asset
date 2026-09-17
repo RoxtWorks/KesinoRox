@@ -9,7 +9,7 @@ EditorBuildSettings:
     path: Assets/Scenes/MainMenu.unity
     guid: 058697939a1a951458afa4f2b47e06f0
   - enabled: 1
-    path: Assets/Scenes/Main.unity
+    path: Assets/Scenes/Roulette.unity
     guid: deb6af2748a7eba41b4c949c1bc6c297
   - enabled: 1
     path: Assets/Scenes/Blackjack.unity
@@ -18,7 +18,7 @@ EditorBuildSettings:
     path: Assets/Scenes/Baccarat.unity
     guid: 329cb0d0e2aabe945aed461ef084ac84
   - enabled: 1
-    path: Assets/Scenes/Craps.unity
+    path: Assets/Scenes/CraplessCraps.unity
     guid: 9d5d65c571854184998690c5db5f98eb
   - enabled: 1
     path: Assets/Scenes/NormalCraps.unity

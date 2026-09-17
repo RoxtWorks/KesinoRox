@@ -151,7 +151,7 @@ public class GameManager : MonoBehaviour
         // MENU opens an in-scene popup listing the other games instead of navigating
         // back to the (now pointless, once you've picked a game) main menu scene.
         switcherPanel = gameObject.AddComponent<GameSwitcherPanel>();
-        switcherPanel.Build(canvasGO.transform, "Main");
+        switcherPanel.Build(canvasGO.transform, "Roulette");
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 

@@ -118,7 +118,7 @@ public class CrapsGameManager : MonoBehaviour
         UIFactory.MakeMuteButton(canvasGO.transform, new Vector2(700, 515));
 
         switcherPanel = gameObject.AddComponent<GameSwitcherPanel>();
-        switcherPanel.Build(canvasGO.transform, "Craps");
+        switcherPanel.Build(canvasGO.transform, "CraplessCraps");
         UIFactory.MakeButton(canvasGO.transform, "MenuNavBtn", new Vector2(-880, 515), new Vector2(180, 32),
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
