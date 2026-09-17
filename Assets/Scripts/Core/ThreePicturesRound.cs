@@ -1,68 +1,86 @@
-using System.Collections.Generic;
-
-// One round of Three Pictures (Royal Three Pictures / 3 Kings).
-// Auto-deals 3 cards to each side, resolves in one synchronous step —
-// no player mid-hand decisions (same structure as BaccaratRound).
+// One round of Three Pictures: up to MaxHands player hands (boxes) against one dealer hand.
+// Only boxes with a bet are dealt. Deal order, like a real table: card 1 to every active box
+// left to right then the dealer, then card 2, then card 3. Never touches Bankroll directly.
 public class ThreePicturesRound
 {
-    readonly Dictionary<ThreePicturesBetType, long> bets = new Dictionary<ThreePicturesBetType, long>();
+    public const int MaxHands = 5;
+
+    readonly long[] bets = new long[MaxHands];
+    readonly bool shuffleEachRound;
 
     public Shoe Shoe { get; }
-    public ThreePicturesHand Player  { get; private set; }
-    public ThreePicturesHand Dealer  { get; private set; }
-    public ThreePicturesOutcome Outcome { get; private set; }
-    public bool RoundOver { get; private set; }
 
-    public ThreePicturesRound(Shoe shoe) { Shoe = shoe; }
+    // shuffleEachRound: single-deck table reshuffles before every deal. Tests pass an ordered shoe and false.
+    public ThreePicturesRound(Shoe shoe, bool shuffleEachRound = true)
+    {
+        Shoe = shoe;
+        this.shuffleEachRound = shuffleEachRound;
+    }
 
-    public long GetBet(ThreePicturesBetType type) => bets.TryGetValue(type, out var v) ? v : 0;
-    public void PlaceBet(ThreePicturesBetType type, long amount) => bets[type] = GetBet(type) + amount;
-    public void ClearBet(ThreePicturesBetType type) => bets[type] = 0;
+    public long GetBet(int box) => bets[box];
+    public void PlaceBet(int box, long amount) => bets[box] += amount;
+    public void ClearBet(int box) => bets[box] = 0;
+    public void ClearAllBets() { for (int i = 0; i < MaxHands; i++) bets[i] = 0; }
+
+    public long TotalOnTable()
+    {
+        long sum = 0;
+        foreach (long b in bets) sum += b;
+        return sum;
+    }
 
     public ThreePicturesRoundResult Deal()
     {
-        if (Shoe.NeedsReshuffle) Shoe.Shuffle();
+        if (shuffleEachRound) Shoe.Shuffle();
 
-        Player = new ThreePicturesHand();
-        Dealer = new ThreePicturesHand();
-        RoundOver = false;
+        var result = new ThreePicturesRoundResult { Dealer = new ThreePicturesHand() };
+        for (int box = 0; box < MaxHands; box++)
+            if (bets[box] > 0)
+                result.Boxes[box] = new ThreePicturesBoxResult { Box = box, Stake = bets[box], Hand = new ThreePicturesHand() };
 
-        // Alternate deal: P-D-P-D-P-D (same as baccarat convention)
-        Player.AddCard(Shoe.Draw());
-        Dealer.AddCard(Shoe.Draw());
-        Player.AddCard(Shoe.Draw());
-        Dealer.AddCard(Shoe.Draw());
-        Player.AddCard(Shoe.Draw());
-        Dealer.AddCard(Shoe.Draw());
-
-        Outcome = ThreePicturesResolver.Resolve(Player, Dealer);
-        RoundOver = true;
-
-        long mainBet   = GetBet(ThreePicturesBetType.Main);
-        long royalBet  = GetBet(ThreePicturesBetType.RoyalBonus);
-
-        var result = new ThreePicturesRoundResult
+        for (int card = 0; card < 3; card++)
         {
-            Outcome       = Outcome,
-            PlayerHand    = Player,
-            DealerHand    = Dealer,
-            MainReturn    = mainBet  > 0 ? ThreePicturesResolver.MainPayout(mainBet, Outcome)         : 0,
-            RoyalReturn   = royalBet > 0 ? ThreePicturesResolver.RoyalBonusPayout(royalBet, Player)   : 0
-        };
+            foreach (var b in result.Boxes) b?.Hand.AddCard(Shoe.Draw());
+            result.Dealer.AddCard(Shoe.Draw());
+        }
 
-        bets[ThreePicturesBetType.Main]       = 0;
-        bets[ThreePicturesBetType.RoyalBonus] = 0;
+        foreach (var b in result.Boxes)
+        {
+            if (b == null) continue;
+            b.Outcome = ThreePicturesResolver.Resolve(b.Hand, result.Dealer);
+            b.HalfPay = ThreePicturesResolver.IsHalfPayWin(b.Hand, b.Outcome);
+            b.Return = ThreePicturesResolver.Payout(b.Stake, b.Hand, b.Outcome);
+        }
 
+        ClearAllBets();
         return result;
     }
 }
 
+public class ThreePicturesBoxResult
+{
+    public int Box;
+    public long Stake;
+    public ThreePicturesHand Hand;
+    public ThreePicturesOutcome Outcome;
+    public bool HalfPay;   // won with a point of 6 → paid 1:2
+    public long Return;    // stake + winnings, 0 on loss
+    public long Net => Return - Stake;
+}
+
 public class ThreePicturesRoundResult
 {
-    public ThreePicturesOutcome  Outcome    { get; set; }
-    public ThreePicturesHand     PlayerHand { get; set; }
-    public ThreePicturesHand     DealerHand { get; set; }
-    public long MainReturn  { get; set; }
-    public long RoyalReturn { get; set; }
-    public long TotalReturned => MainReturn + RoyalReturn;
+    public ThreePicturesHand Dealer;
+    // Indexed by box; null where no bet was placed
+    public readonly ThreePicturesBoxResult[] Boxes = new ThreePicturesBoxResult[ThreePicturesRound.MaxHands];
+
+    public long TotalStaked
+    {
+        get { long s = 0; foreach (var b in Boxes) if (b != null) s += b.Stake; return s; }
+    }
+
+    public long TotalReturned
+    {
+        get { long s = 0; foreach (var b in Boxes) if (b != null) s += b.Return; return s; }
+    }
 }

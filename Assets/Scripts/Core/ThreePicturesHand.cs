@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-// One hand in Three Pictures (Royal Three Pictures / 3 Kings). Three cards are
+// One hand in Three Pictures. Three cards are
 // dealt; the hand's "point" is the sum of card values mod 10 (baccarat-style),
 // where 10/J/Q/K = 0 and Ace = 1. A hand with THREE picture cards (J/Q/K) is
 // the highest-ranking hand and beats any point total. Picture cards have no

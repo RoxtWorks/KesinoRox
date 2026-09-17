@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -6,13 +6,11 @@ public class ThreePicturesGameManager : MonoBehaviour
 {
     Bankroll bankroll;
     Shoe shoe;
-    BlackjackTableBuilder builder;
 
     BankrollHudUI hud;
     ChipSelectorUI chipSelector;
     ThreePicturesBettingUIController bettingController;
     ThreePicturesHistoryPanelUI historyPanel;
-    ResultsStripUI resultsStrip;
     SoundManager soundManager;
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
@@ -25,22 +23,20 @@ public class ThreePicturesGameManager : MonoBehaviour
     readonly List<ThreePicturesRoundRecord> sessionRecords = new List<ThreePicturesRoundRecord>();
     int nextRoundIndex;
 
-    static readonly Vector2 HistoryPos  = new Vector2(800, 200);
-    static readonly Vector2 HistorySize = new Vector2(300, 560);
+    // Tall column on the right, same as Sic Bo
+    static readonly Vector2 HistoryPos  = new Vector2(820, -28);
+    static readonly Vector2 HistorySize = new Vector2(270, 1016);
 
     void Start()
     {
         Application.runInBackground = true;
         SoundManager.ApplyPersistedMuteState();
 
-        builder = gameObject.AddComponent<BlackjackTableBuilder>();
-        builder.Build();
-
         SetupCamera();
         SetupLight();
 
         bankroll = new Bankroll(1000);
-        shoe = new Shoe(8, new SystemRandomSource());
+        shoe = new Shoe(1, new SystemRandomSource()); // single deck, reshuffled every round
 
         SetupUI();
     }
@@ -112,18 +108,19 @@ public class ThreePicturesGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "3 KINGS (THREE PICTURES) RULES",
-            "3 Kings (Royal Three Pictures) â€” Singapore rules.\n\n" +
-            "DEAL: player and dealer each receive 3 cards.\n\n" +
-            "HAND RANKING (highest to lowest):\n" +
-            "  ROYAL â€” 3 picture cards (J/Q/K). Beats all point hands.\n" +
-            "  POINT â€” card values mod 10 (same as Baccarat). Highest wins.\n" +
-            "  Tied points: compare picture card count (more = wins).\n\n" +
-            "MAIN BET â€” pays 1:1 on win.\n" +
-            "ROYAL BONUS â€” independent side bet:\n" +
-            "  Player gets ROYAL â†’ pays 5:1\n" +
-            "  Player gets 2 pictures â†’ pays 1:1\n" +
-            "  (Dealer's hand does not affect Royal Bonus.)");
+        rulesPanel.Build(canvasGO.transform, "THREE PICTURES RULES",
+            "Three Pictures - Malaysian no-commission rules, one deck.\n\n" +
+            "Bet on 1 to 5 hands. Every hand and the dealer get 3 cards.\n" +
+            "Each of your hands plays against the dealer's hand.\n\n" +
+            "POINTS: 10, J, Q, K count 0, Ace counts 1, others face value.\n" +
+            "Add the cards and keep the last digit (9 is the best point).\n\n" +
+            "RANKING:\n" +
+            "  1. Three pictures (any J, Q, K) beats everything.\n" +
+            "  2. Otherwise the higher point wins.\n" +
+            "  3. Same point: more picture cards wins (Q-Q-9 beats J-10-9).\n" +
+            "  4. Same point and same pictures: push.\n\n" +
+            "PAYOUTS: win pays 1 to 1, a win with 6 points pays 1 to 2, a tie is a push.\n\n" +
+            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -146,7 +143,7 @@ public class ThreePicturesGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -155,18 +152,17 @@ public class ThreePicturesGameManager : MonoBehaviour
                     int wins = sessionRecords.Count(r => r.NetChange > 0);
                     long biggest = sessionRecords.Max(r => r.NetChange);
                     string bestPart = biggest > 0 ? $", best +{UIFactory.FormatMoney(biggest)}" : "";
-                    milestoneToast.Show($"Session: {sessionRecords.Count} rounds, {wins} wins{bestPart}", UIFactory.Accent, fontSize: 26);
+                    milestoneToast.Show($"Session: {sessionRecords.Count} rounds, {wins} up{bestPart}", UIFactory.Accent, fontSize: 26);
                 }
                 bankroll.Reset(resetAmount);
                 hud.Refresh();
                 historyPanel.Clear();
-                resultsStrip.Clear();
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -174,9 +170,6 @@ public class ThreePicturesGameManager : MonoBehaviour
 
         historyPanel = gameObject.AddComponent<ThreePicturesHistoryPanelUI>();
         historyPanel.Build(canvasGO.transform, HistoryPos, HistorySize);
-
-        resultsStrip = gameObject.AddComponent<ResultsStripUI>();
-        resultsStrip.Build(canvasGO.transform, new Vector2(0, -505));
 
         bettingController = gameObject.AddComponent<ThreePicturesBettingUIController>();
         bettingController.Build(canvasGO.transform, bankroll, chipSelector, shoe, soundManager, juiceManager,
@@ -186,12 +179,10 @@ public class ThreePicturesGameManager : MonoBehaviour
                 hud.Refresh();
                 sessionRecords.Add(record);
                 historyPanel.AddRecord(record);
-                string label = record.Outcome == ThreePicturesOutcome.PlayerWins ? "W" : record.Outcome == ThreePicturesOutcome.DealerWins ? "L" : "T";
-                Color col = record.Outcome == ThreePicturesOutcome.PlayerWins ? UIFactory.Positive : record.Outcome == ThreePicturesOutcome.DealerWins ? UIFactory.Negative : UIFactory.Accent;
-                resultsStrip.AddResult(label, col);
                 nextRoundIndex = record.RoundIndex + 1;
-                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
-            });
+                ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+            },
+            () => hud.Refresh());
 
         if (ThreePicturesSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<ThreePicturesRoundRecord> loadedRecords))
@@ -208,9 +199,14 @@ public class ThreePicturesGameManager : MonoBehaviour
         SceneTransition.Reveal();
     }
 
-    void OnApplicationQuit()
+    // Leaving the table (quit or switching games) pays out any hand already dealt and returns chips before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
+
+    void LeaveTable()
     {
-        if (bankroll != null) ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        ThreePicturesSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
     }
 }
-
