@@ -1,12 +1,12 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.UI;
 
-// Craps' equivalent of the other three games' GameManager â€” thin orchestrator, same
+// Craps' equivalent of the other three games' GameManager — thin orchestrator, same
 // composition pattern: builds the scene/UI procedurally at runtime and wires
 // Presentation controllers to Core session objects. Reuses BlackjackTableBuilder
-// unchanged for the 3D felt backdrop â€” same precedent Baccarat already set, it's
+// unchanged for the 3D felt backdrop — same precedent Baccarat already set, it's
 // already generic set-dressing with zero blackjack-specific coupling.
 public class CrapsGameManager : MonoBehaviour
 {
@@ -30,14 +30,13 @@ public class CrapsGameManager : MonoBehaviour
     Light keyLight;
 
     readonly List<CrapsRoundRecord> sessionRecords = new List<CrapsRoundRecord>();
+    // Last per-roll History rows, persisted so History survives a restart
+    readonly List<CrapsRoundRecord> rollRecords = new List<CrapsRoundRecord>();
     int nextRoundIndex;
 
-    // Shrunk and moved up from the other 3 games' (800,200)/(300,560) â€” Craps now
-    // has a permanent "One-Roll Bets" side panel occupying that space below y=10
-    // (mirroring Hardways on the left), so History is confined to the strip above
-    // it instead, between the top corner buttons and that panel's top edge.
-    static readonly Vector2 HistoryPos = new Vector2(800, 254);
-    static readonly Vector2 HistorySize = new Vector2(300, 470);
+    // Same placement as Normal Craps so both craps tables share one layout
+    static readonly Vector2 HistoryPos  = new Vector2(780, 150);
+    static readonly Vector2 HistorySize = new Vector2(300, 680);
 
     void Start()
     {
@@ -124,23 +123,18 @@ public class CrapsGameManager : MonoBehaviour
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
         rulesPanel.Build(canvasGO.transform, "CRAPLESS CRAPS RULES",
-            "Every total except 7 can be a point â€” 2, 3, 11, 12 included. On the\n" +
-            "come-out roll, only a 7 resolves anything; every other total just\n" +
-            "sets the point. No instant win or loss on 2, 3, 11, or 12.\n\n" +
-            "PASS LINE / DON'T PASS â€” pays 1:1. Wins/loses on the point\n" +
-            "repeating or a 7. Locked once the point is set.\n" +
-            "COME / DON'T COME â€” like a second Pass Line, started anytime\n" +
-            "after the point is set. Travels to its own point on the next roll.\n" +
-            "FIELD â€” one-roll bet. Wins 3/4/9/10/11 (1:1), 2 (2:1), 12 (3:1).\n" +
-            "PLACE â€” bet a number repeats before a 7. Only working once a\n" +
-            "point is set. 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6,\n" +
+            "COME-OUT ROLL: 7 wins the Pass Line. Every other total, including 2, 3,\n" +
+            "11 and 12, sets the POINT - nothing craps out. SEVEN OUT ends the turn.\n\n" +
+            "PASS / COME - the shooter's line bets, 1:1, with true odds behind them\n" +
+            "(2/12 pay 6:1, 3/11 pay 3:1). No Don't bets in crapless.\n" +
+            "PLACE - number before a 7: 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6,\n" +
             "2/12 pay 11:2, 3/11 pay 11:4.\n" +
-            "HARDWAYS â€” bet a number rolls as a matching pair (e.g. 2+2)\n" +
-            "before a 7 or the easy way. 4/10 pay 7:1, 6/8 pay 9:1.\n" +
-            "ODDS â€” true-odds side bet behind a working point, once set,\n" +
-            "capped at 3x that bet. Use ADD ODDS once a point is eligible.\n\n" +
-            "SEVEN OUT (a 7 during the point phase) ends the shooter's\n" +
-            "turn and clears every Place/Hardway/Come bet at once.");
+            "HARDWAYS - Hard 4/10 pay 7:1, Hard 6/8 pay 9:1.\n" +
+            "BETS ON/OFF covers Place and Hardways; the dealer asks at each point change.\n\n" +
+            "ONE-ROLL: Field (2 pays 2:1, 12 pays 3:1), Any Craps 7:1, Any Seven 4:1,\n" +
+            "Eleven 15:1, Horn, C&E (craps 3:1, eleven 7:1).\n" +
+            "LUCKY ROLLER: bet before a run starts; any 7 loses. Small/Tall 30:1, All 155:1.\n\n" +
+            "RIGHT-CLICK a bet to take it down (Pass Line locks once the point is set).");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -163,7 +157,7 @@ public class CrapsGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -182,9 +176,11 @@ public class CrapsGameManager : MonoBehaviour
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
+                rollRecords.Clear();
+                bettingController.SetRollLogIndex(0);
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -195,13 +191,13 @@ public class CrapsGameManager : MonoBehaviour
 
         resultsStrip = gameObject.AddComponent<ResultsStripUI>();
         // Felt panel bottom edge sits at -424 (see CrapsBettingUIController's layout
-        // comment) â€” placed clear of it and within the visible canvas at this
+        // comment) — placed clear of it and within the visible canvas at this
         // reference resolution. A first pass here put this at -590/-500 without
         // checking the actual felt height, clipping it off the bottom of the
-        // canvas â€” caught by checking the whole rendered layout in one screenshot
+        // canvas — caught by checking the whole rendered layout in one screenshot
         // instead of just the element being placed.
         // Felt bottom edge grew to -466 (Pass Line moved below the Place row to
-        // wrap it, per the reference table's framing) â€” pushed down to stay clear,
+        // wrap it, per the reference table's framing) — pushed down to stay clear,
         // same margin discipline as before.
         resultsStrip.Build(canvasGO.transform, new Vector2(0, -505));
 
@@ -224,31 +220,39 @@ public class CrapsGameManager : MonoBehaviour
                 hud.Refresh();
                 sessionRecords.Add(record);
                 nextRoundIndex = record.RoundIndex + 1;
-                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             },
             () => hud.Refresh(),
             // Per-ROLL results strip (the actual number, colored by that roll's
-            // outcome) â€” every reference app's roll strip works this way, not per
+            // outcome) — every reference app's roll strip works this way, not per
             // shooter turn. Not persisted, so it starts empty after a reload, same
             // as a real machine's session strip.
             (label, color) => resultsStrip.AddResult(label, color),
-            // Detailed History panel â€” also per roll now (was per shooter-turn,
-            // which made a mid-turn payout like a Place bet hit look like nothing
-            // happened). Not persisted either, same reasoning as the results strip.
-            record => historyPanel.AddRecord(record));
+            // Detailed History panel — one row per roll, not persisted (same as the results strip).
+            record =>
+            {
+                historyPanel.AddRecord(record);
+                rollRecords.Add(record);
+                if (rollRecords.Count > CrapsSaveSystem.MaxSavedRolls) rollRecords.RemoveAt(0);
+                CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
+            });
 
         if (CrapsSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
-                out int loadedNextRoundIndex, out List<CrapsRoundRecord> loadedRecords))
+                out int loadedNextRoundIndex, out List<CrapsRoundRecord> loadedRecords, out List<CrapsRoundRecord> loadedRolls))
         {
             bankroll.LoadState(balance, startingBalance, totalFunded);
             hud.Refresh();
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
             sessionRecords.AddRange(loadedRecords);
-            // historyPanel is per-roll now, not per-turn (see Build() above) and
-            // isn't persisted â€” same as resultsStrip, it starts empty after a
-            // reload rather than replaying old per-turn summaries into a per-roll
-            // view where they wouldn't mean the same thing.
+            // Restore the last saved rolls into History and the results strip, oldest first
+            rollRecords.AddRange(loadedRolls);
+            foreach (var r in loadedRolls)
+            {
+                historyPanel.AddRecord(r);
+                resultsStrip.AddResult(r.RollTotal.ToString(), r.NetChange > 0 ? UIFactory.Positive : r.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
+            }
+            if (loadedRolls.Count > 0) bettingController.SetRollLogIndex(loadedRolls[loadedRolls.Count - 1].RoundIndex + 1);
         }
 
         soundManager.PlayMusic();
@@ -258,9 +262,9 @@ public class CrapsGameManager : MonoBehaviour
         SceneTransition.Reveal();
     }
 
-    // Renders the dome to its own 512Ã—512 RenderTexture via a dedicated camera
-    // positioned at a 3/4 angle (~40Â° elevation, slightly to the side). This lets
-    // the player see the dome floor clearly â€” they can verify the dice actually
+    // Renders the dome to its own 512x512 RenderTexture via a dedicated camera
+    // positioned at a 3/4 angle (~40° elevation, slightly to the side). This lets
+    // the player see the dome floor clearly — they can verify the dice actually
     // landed flat and read the face-up value, which the original top-down view made
     // impossible. The RawImage is placed at a fixed canvas position (upper-left,
     // out of the way of the betting felt) rather than spanning the full screen.
@@ -272,7 +276,7 @@ public class CrapsGameManager : MonoBehaviour
         Physics.IgnoreLayerCollision(diceLayer, 0, true);          // ignore Default-layer table geo
         cam.cullingMask &= ~(1 << diceLayer);
 
-        // Square RT â€” 512Ã—512 at the ~420-canvas-unit display size is sharp enough.
+        // Square RT — 512x512 at the ~420-canvas-unit display size is sharp enough.
         var rtDesc = new RenderTextureDescriptor(512, 512, RenderTextureFormat.ARGB32, 24) { sRGB = true };
         var rt = new RenderTexture(rtDesc) { name = "DiceOverlayRT" };
         rt.Create();
@@ -288,12 +292,12 @@ public class CrapsGameManager : MonoBehaviour
         diceCam.depth = cam.depth + 1;
         diceCam.fieldOfView = 54f;
         diceCam.farClipPlane = 60f;
-        // ~40Â° elevation, slight rightward offset â€” shows dome floor clearly so the
+        // ~40° elevation, slight rightward offset — shows dome floor clearly so the
         // player can see where each die landed and verify the face-up result.
         diceCamGO.transform.position = domeAim + new Vector3(0.6f, 2.6f, 3.6f);
         diceCamGO.transform.LookAt(domeAim, Vector3.up);
 
-        // Upper-left canvas position â€” clear of the felt, HUD, and history panel.
+        // Upper-left canvas position — clear of the felt, HUD, and history panel.
         var overlayGO = new GameObject("DiceOverlayImage", typeof(RectTransform));
         overlayGO.transform.SetParent(canvasParent, false);
         var raw = overlayGO.AddComponent<RawImage>();
@@ -302,8 +306,8 @@ public class CrapsGameManager : MonoBehaviour
         var overlayRt = overlayGO.GetComponent<RectTransform>();
         overlayRt.anchorMin = overlayRt.anchorMax = new Vector2(0.5f, 0.5f);
         overlayRt.pivot = new Vector2(0.5f, 0.5f);
-        overlayRt.anchoredPosition = new Vector2(-530f, 210f);
-        overlayRt.sizeDelta = new Vector2(420f, 420f);
+        overlayRt.anchoredPosition = new Vector2(-700f, 0f);
+        overlayRt.sizeDelta = new Vector2(340f, 340f);
         overlayGO.transform.SetAsLastSibling();
     }
 
@@ -314,7 +318,7 @@ public class CrapsGameManager : MonoBehaviour
     }
 
     // Casts a ray from the camera through a viewport-space point (0-1 range, origin
-    // bottom-left) and intersects it with the horizontal plane at the given world Y â€”
+    // bottom-left) and intersects it with the horizontal plane at the given world Y —
     // the way to place a 3D object at a specific spot on screen when there's no
     // render-texture/second-camera setup, just this scene's single top-down camera.
     static Vector3 ViewportToGround(Camera camera, Vector2 viewportPos, float groundY)
@@ -324,9 +328,15 @@ public class CrapsGameManager : MonoBehaviour
         return ray.origin + ray.direction * t;
     }
 
-    void OnApplicationQuit()
+    // Leaving the table (quit or switching games) picks every chip up and returns it to the wallet before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
+
+    void LeaveTable()
     {
-        if (bankroll != null) CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        CrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
     }
 }
 

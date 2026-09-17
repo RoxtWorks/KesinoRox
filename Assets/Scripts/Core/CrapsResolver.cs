@@ -85,6 +85,19 @@ public static class CrapsResolver
     public static long AnySevenPayout(long stake, int total) => total == 7 ? stake * 5 : 0;
     public static long AnyElevenPayout(long stake, int total) => total == 11 ? stake * 16 : 0;
 
+    // C&E: stake splits in half — craps half pays 7:1, eleven half pays 15:1, other half loses.
+    // Net result: 3:1 on 2/3/12, 7:1 on 11.
+    public static long CAndEPayout(long stake, int total)
+    {
+        long half = stake / 2;
+        return total switch
+        {
+            2 or 3 or 12 => half * 8,
+            11 => half * 16,
+            _ => 0
+        };
+    }
+
     // Splits the stake 4 ways across 2/3/11/12 (integer division — chip denominations
     // of 25/100/500 don't split perfectly by 4; the remainder is a small, documented
     // rounding loss, same "integer math throughout" convention every resolver here

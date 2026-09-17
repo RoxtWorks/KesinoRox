@@ -16,14 +16,16 @@ public class CrapsRollResult
     public long AnySevenReturn;
     public long AnyElevenReturn;
     public long HornReturn;
+    public long CAndEReturn;
 
-    // number -> total returned, only entries that actually hit this roll.
+    // number -> amount paid. Place = winnings only (stake stays); Hardway = stake + winnings.
     public readonly Dictionary<int, long> PlaceHits = new Dictionary<int, long>();
+    public readonly Dictionary<int, long> PlaceLosses = new Dictionary<int, long>();
     public readonly Dictionary<int, long> HardwayHits = new Dictionary<int, long>();
 
-    // Come wagers that resolved (won) this roll, and what they paid.
+    // Come wagers that paid this roll (base win, or odds returned when a 7 kills a parked
+    // bet on the come-out), and wagers that were traveling and just parked at a new point.
     public readonly Dictionary<ComeWager, long> ComeReturns = new Dictionary<ComeWager, long>();
-    // Wagers that were traveling and just parked at a new point this roll (no payout).
     public readonly List<ComeWager> ComeParked = new List<ComeWager>();
 
     public bool PassResolved;
@@ -36,7 +38,19 @@ public class CrapsRollResult
     // one event that ends the whole shooter's turn. A come-out 7 pays Pass Line but
     // does NOT end the round; the shooter keeps rolling a fresh come-out.
     public bool RoundOver;
+    public bool PlaceBetsCarriedOver;  // seven-out with BETS OFF — Place/Hardway stakes stay for next shooter
 
-    public long TotalReturned => FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn
-        + PlaceHits.Values.Sum() + HardwayHits.Values.Sum() + ComeReturns.Values.Sum() + PassReturn;
+    // Lucky Roller (ATS)
+    public long AtsLowsReturn;   // 0 or stake*31
+    public long AtsHighsReturn;  // 0 or stake*31
+    public long AtsAllReturn;    // 0 or stake*156
+    public bool AtsSevenOut;     // any 7 → ATS run over, bets lost
+
+    // All bet stakes consumed/resolved this roll (wins + losses).
+    // net = TotalReturned - TotalStaked = true profit/loss per roll.
+    public long TotalStaked;
+
+    public long TotalReturned => FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn + CAndEReturn
+        + PlaceHits.Values.Sum() + HardwayHits.Values.Sum() + ComeReturns.Values.Sum() + PassReturn
+        + AtsLowsReturn + AtsHighsReturn + AtsAllReturn;
 }

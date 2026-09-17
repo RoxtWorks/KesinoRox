@@ -4,29 +4,33 @@ using System.Globalization;
 using System.IO;
 using UnityEngine;
 
-// Same shape and path-resolution trick as the other three games' save systems, its
-// own file — crapssim_save.txt — so all four games' sessions stay isolated.
+// Same shape and path-resolution trick as the other games' save systems, its
+// own file — crapssim_save.txt — so every game's session stays isolated.
+// Lines: header, then one per shooter-turn summary, then "R,"-prefixed per-roll History rows.
 public static class CrapsSaveSystem
 {
     const string FileName = "crapssim_save.txt";
     const int MaxSavedRecords = 500;
+    public const int MaxSavedRolls = 30;
 
     static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
 
-    public static void Save(Bankroll bankroll, int nextRoundIndex, List<CrapsRoundRecord> records)
+    // chipsOnTable is counted into the saved balance so a crash mid-turn refunds the felt instead of losing it.
+    public static void Save(Bankroll bankroll, int nextRoundIndex, List<CrapsRoundRecord> records,
+        List<CrapsRoundRecord> rollRecords, long chipsOnTable = 0)
     {
         try
         {
             var lines = new List<string>
             {
-                string.Join(",", bankroll.Balance, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
+                string.Join(",", bankroll.Balance + chipsOnTable, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
             };
             int start = Mathf.Max(0, records.Count - MaxSavedRecords);
             for (int i = start; i < records.Count; i++)
-            {
-                var r = records[i];
-                lines.Add(string.Join(",", r.RoundIndex, r.FinalPoint, r.RollCount, r.TotalStaked, r.TotalReturned, r.BalanceAfter, r.RollTotal));
-            }
+                lines.Add(Line(records[i]));
+            int rollStart = Mathf.Max(0, rollRecords.Count - MaxSavedRolls);
+            for (int i = rollStart; i < rollRecords.Count; i++)
+                lines.Add("R," + Line(rollRecords[i]));
             File.WriteAllLines(FilePath, lines);
         }
         catch (Exception e)
@@ -35,12 +39,16 @@ public static class CrapsSaveSystem
         }
     }
 
+    static string Line(CrapsRoundRecord r) =>
+        string.Join(",", r.RoundIndex, r.FinalPoint, r.RollCount, r.TotalStaked, r.TotalReturned, r.BalanceAfter, r.RollTotal);
+
     public static bool TryLoad(out long balance, out long startingBalance, out long totalFunded,
-        out int nextRoundIndex, out List<CrapsRoundRecord> records)
+        out int nextRoundIndex, out List<CrapsRoundRecord> records, out List<CrapsRoundRecord> rollRecords)
     {
         balance = startingBalance = totalFunded = 0;
         nextRoundIndex = 0;
         records = new List<CrapsRoundRecord>();
+        rollRecords = new List<CrapsRoundRecord>();
 
         if (!File.Exists(FilePath)) return false;
 
@@ -59,16 +67,18 @@ public static class CrapsSaveSystem
             {
                 if (string.IsNullOrWhiteSpace(lines[i])) continue;
                 var f = lines[i].Split(',');
-                records.Add(new CrapsRoundRecord(
-                    int.Parse(f[0], CultureInfo.InvariantCulture),
-                    int.Parse(f[1], CultureInfo.InvariantCulture),
-                    int.Parse(f[2], CultureInfo.InvariantCulture),
-                    long.Parse(f[3], CultureInfo.InvariantCulture),
-                    long.Parse(f[4], CultureInfo.InvariantCulture),
-                    long.Parse(f[5], CultureInfo.InvariantCulture),
-                    // Older save files (before the Roll column existed) won't have
-                    // a 7th field — default to 0 rather than fail to load.
-                    f.Length > 6 ? int.Parse(f[6], CultureInfo.InvariantCulture) : 0));
+                bool isRoll = f[0] == "R";
+                int o = isRoll ? 1 : 0;
+                var record = new CrapsRoundRecord(
+                    int.Parse(f[o], CultureInfo.InvariantCulture),
+                    int.Parse(f[o + 1], CultureInfo.InvariantCulture),
+                    int.Parse(f[o + 2], CultureInfo.InvariantCulture),
+                    long.Parse(f[o + 3], CultureInfo.InvariantCulture),
+                    long.Parse(f[o + 4], CultureInfo.InvariantCulture),
+                    long.Parse(f[o + 5], CultureInfo.InvariantCulture),
+                    // Older save files (before the Roll column existed) won't have a 7th field
+                    f.Length > o + 6 ? int.Parse(f[o + 6], CultureInfo.InvariantCulture) : 0);
+                (isRoll ? rollRecords : records).Add(record);
             }
             return true;
         }

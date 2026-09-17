@@ -1871,6 +1871,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     void HideOddsModal() => oddsModalRoot.SetActive(false);
 
     public void SetRoundIndex(int index) => roundIndex = index;
+    public void SetRollLogIndex(int index) => rollLogIndex = index;
 
     public void ResetRound()
     {

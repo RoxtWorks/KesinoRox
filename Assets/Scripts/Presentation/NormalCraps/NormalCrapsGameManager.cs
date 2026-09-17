@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -24,6 +24,8 @@ public class NormalCrapsGameManager : MonoBehaviour
     Light keyLight;
 
     readonly List<NormalCrapsRoundRecord> sessionRecords = new List<NormalCrapsRoundRecord>();
+    // Last per-roll History rows, persisted so History survives a restart
+    readonly List<NormalCrapsRoundRecord> rollRecords = new List<NormalCrapsRoundRecord>();
     int nextRoundIndex;
 
     static readonly Vector2 HistoryPos  = new Vector2(780, 150);
@@ -147,7 +149,7 @@ public class NormalCrapsGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -165,9 +167,11 @@ public class NormalCrapsGameManager : MonoBehaviour
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
+                rollRecords.Clear();
+                bettingController.SetRollLogIndex(0);
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -191,25 +195,34 @@ public class NormalCrapsGameManager : MonoBehaviour
                 hud.Refresh();
                 sessionRecords.Add(record);
                 nextRoundIndex = record.RoundIndex + 1;
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             },
             () => hud.Refresh(),
             (label, color) => resultsStrip.AddResult(label, color),
             record =>
             {
                 historyPanel.AddRecord(record);
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+                rollRecords.Add(record);
+                if (rollRecords.Count > NormalCrapsSaveSystem.MaxSavedRolls) rollRecords.RemoveAt(0);
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
             });
 
         if (NormalCrapsSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
-                out int loadedNextRoundIndex, out List<NormalCrapsRoundRecord> loadedRecords))
+                out int loadedNextRoundIndex, out List<NormalCrapsRoundRecord> loadedRecords, out List<NormalCrapsRoundRecord> loadedRolls))
         {
             bankroll.LoadState(balance, startingBalance, totalFunded);
             hud.Refresh();
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
-            // History panel is per-roll and session-local; saved records are per shooter turn
             sessionRecords.AddRange(loadedRecords);
+            // Restore the last saved rolls into History and the results strip, oldest first
+            rollRecords.AddRange(loadedRolls);
+            foreach (var r in loadedRolls)
+            {
+                historyPanel.AddRecord(r);
+                resultsStrip.AddResult(r.RollTotal.ToString(), r.NetChange > 0 ? UIFactory.Positive : r.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
+            }
+            if (loadedRolls.Count > 0) bettingController.SetRollLogIndex(loadedRolls[loadedRolls.Count - 1].RoundIndex + 1);
         }
 
         soundManager.PlayMusic();
@@ -271,7 +284,7 @@ public class NormalCrapsGameManager : MonoBehaviour
     {
         if (bankroll == null || bettingController == null) return;
         bettingController.RefundTableBets();
-        NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+        NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, rollRecords, bettingController.OnTableTotal());
     }
 }
 

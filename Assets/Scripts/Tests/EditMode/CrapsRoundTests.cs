@@ -215,12 +215,14 @@ public class CrapsRoundTests
     public void Hardway_WinsOnMatchingDouble_LosesOnEasyWay()
     {
         var winRound = new CrapsRound(new FixedDiceSource(2, 2)); // hard 4
+        winRound.PlaceBetsWorking = true;
         winRound.PlaceBet(CrapsBetType.Hard4, 25);
         var winResult = winRound.Roll();
         Assert.AreEqual(25 * 8, winResult.HardwayHits[4]);
         Assert.AreEqual(0, winRound.GetBet(CrapsBetType.Hard4));
 
         var loseRound = new CrapsRound(new FixedDiceSource(1, 3)); // easy 4
+        loseRound.PlaceBetsWorking = true;
         loseRound.PlaceBet(CrapsBetType.Hard4, 25);
         var loseResult = loseRound.Roll();
         Assert.IsFalse(loseResult.HardwayHits.ContainsKey(4));
@@ -234,6 +236,7 @@ public class CrapsRoundTests
         // must NOT contain 8 — the caller uses the absence of HardwayHits[8] to detect
         // the silent easy-way loss and credit -stake in the history row.
         var round = new CrapsRound(new FixedDiceSource(5, 3)); // 8, easy way
+        round.PlaceBetsWorking = true;
         round.PlaceBet(CrapsBetType.Hard8, 25);
         var result = round.Roll();
 
