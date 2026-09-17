@@ -13,6 +13,18 @@ public class PreSimResult
     public int Nat1, Nat2;
 }
 
+// Same as PreSimResult for any number of dice shaken by a popper floor (Sic Bo rolls three).
+public class PreSimGroupResult
+{
+    public List<Vector3>[] Pos;
+    public List<Quaternion>[] Rot;
+    public int[] Nat;
+    public List<float> FloorOffset;      // floor height above rest, per frame
+    public List<Quaternion> FloorTilt;   // floor tilt from rest, per frame
+    public int RemapFrames;              // frames over which the face remap blends in (dice airborne)
+    public float MinLift;                // lowest height any die reached on any kick (rejects weak throws)
+}
+
 // A real 3D die. Visually it's built the same way RouletteTableBuilder/
 // WheelSpinAnimator build the wheel, but the toss itself uses a real Rigidbody +
 // BoxCollider bouncing off real (invisible) wall/floor colliders in the scene —
@@ -365,6 +377,235 @@ public class Dice3D : MonoBehaviour
         var p = die.transform.position;
         p.y = floorWorldY + die.dieSize * 0.5f;
         die.transform.position = p;
+    }
+
+    // --- Any number of dice shaken by a popper floor (Sic Bo). Same two-phase idea as RunPreSim / RollPair. ---
+
+    // Like a bubble-craps shaker: the dome floor kicks up several times at random strengths (with a slight tilt),
+    // throwing the dice each time. The floor is a kinematic rigidbody moved inside the silent simulation, so the
+    // dice fly from real contact; its motion is recorded and replayed on the visible floor disc.
+    const int MinKicks = 3, MaxKicks = 5;
+    const float KickHeightMin = 0.16f, KickHeightMax = 0.26f;   // how far the floor pops up (sets how high the dice fly)
+    const float KickUpTime = 0.06f, KickDownTime = 0.12f;
+    // Next kick fires only once all dice are back on the felt (plus a short random pause) — a kick while a die is
+    // still airborne never touches it, which is what made some throws "barely move"
+    const float KickPauseMin = 0.08f, KickPauseMax = 0.30f, KickForceAfter = 1.6f;
+    const float MinKickLift = 0.6f;                                // every die must rise at least a die-height on every kick
+    const float KickTiltMaxDeg = 7f;
+    const float GroupSettleAfterKicks = 0.5f, GroupMaxDuration = 10f;
+    const float GroupPlaybackSpeed = 2.4f;                         // replay faster than the real-time sim so a roll stays snappy (~3s)
+
+    public static IEnumerator RunPreSimGroup(Dice3D[] shadows, Dice3D[] visible, Rigidbody floor, Action<PreSimGroupResult> onDone)
+    {
+        var prevMode = Physics.simulationMode;
+        var prevGravity = Physics.gravity;
+        Physics.simulationMode = SimulationMode.Script;
+        Physics.gravity = new Vector3(0f, -9.81f, 0f);
+
+        // Start from exactly where the visible dice are resting so playback begins without a jump
+        var startPos = new Vector3[shadows.Length];
+        var startRot = new Quaternion[shadows.Length];
+        for (int i = 0; i < shadows.Length; i++)
+        {
+            startPos[i] = visible[i].transform.localPosition;
+            startRot[i] = visible[i].transform.localRotation;
+        }
+
+        PreSimGroupResult result;
+        while (true)
+        {
+            result = SimulateGroup(shadows, startPos, startRot, floor);
+            if (IsValidSettleGroup(shadows) && result.MinLift >= MinKickLift) break;
+            yield return null;
+        }
+
+        result.Nat = new int[shadows.Length];
+        for (int i = 0; i < shadows.Length; i++)
+        {
+            result.Nat[i] = shadows[i].DetectTopFace();
+            shadows[i].rb.isKinematic = true;
+        }
+
+        Physics.gravity = prevGravity;
+        Physics.simulationMode = prevMode;
+        onDone(result);
+    }
+
+    public static IEnumerator RollGroup(Dice3D[] dice, int[] vals, PreSimGroupResult presim, Transform floorVisual)
+    {
+        var offsets = new Quaternion[dice.Length];
+        for (int i = 0; i < dice.Length; i++)
+        {
+            var d = dice[i];
+            d.Settled = false;
+            if (d.tumbleRoutine != null) { d.StopCoroutine(d.tumbleRoutine); d.tumbleRoutine = null; }
+            d.transform.DOKill();
+            offsets[i] = FaceRotationOffset(presim.Nat[i], vals[i]);
+            d.rb.isKinematic = true;
+        }
+        Vector3 floorRestPos = floorVisual.localPosition;
+        Quaternion floorRestRot = floorVisual.localRotation;
+
+        int count = presim.Pos[0].Count;
+        float stepAccum = 0f;
+        int frame = 0;
+        while (true)
+        {
+            // The face remap blends in while the dice are airborne from the first kick, so there's no visible snap
+            float blend = Mathf.Clamp01((float)frame / presim.RemapFrames);
+            for (int i = 0; i < dice.Length; i++)
+            {
+                dice[i].transform.position = presim.Pos[i][frame];
+                dice[i].transform.rotation = presim.Rot[i][frame] * Quaternion.Slerp(Quaternion.identity, offsets[i], blend);
+            }
+            floorVisual.localPosition = floorRestPos + new Vector3(0f, presim.FloorOffset[frame], 0f);
+            floorVisual.localRotation = presim.FloorTilt[frame] * floorRestRot;
+            if (frame >= count - 1) break;
+            yield return null;
+            stepAccum += GroupPlaybackSpeed * (Time.deltaTime / Time.fixedDeltaTime);
+            while (stepAccum >= 1f && frame < count - 1) { stepAccum -= 1f; frame++; }
+        }
+
+        floorVisual.localPosition = floorRestPos;
+        floorVisual.localRotation = floorRestRot;
+        foreach (var d in dice) d.Settled = true;
+    }
+
+    static PreSimGroupResult SimulateGroup(Dice3D[] dice, Vector3[] startPos, Quaternion[] startRot, Rigidbody floor)
+    {
+        int n = dice.Length;
+        var r = new PreSimGroupResult
+        {
+            Pos = new List<Vector3>[n], Rot = new List<Quaternion>[n],
+            FloorOffset = new List<float>(), FloorTilt = new List<Quaternion>()
+        };
+
+        int kicks = UnityEngine.Random.Range(MinKicks, MaxKicks + 1);
+        const float firstKickAt = 0.05f;
+        r.RemapFrames = Mathf.Max(1, Mathf.RoundToInt((firstKickAt + KickUpTime + 0.25f) / Time.fixedDeltaTime));
+
+        Transform parent = floor.transform.parent;
+        float restY = (parent != null ? parent.position.y : 0f) + 0.04f + dice[0].dieSize * 0.5f;
+        Vector3 floorRest = floor.transform.localPosition;
+        Quaternion floorRestRot = floor.transform.localRotation;
+
+        for (int i = 0; i < n; i++)
+        {
+            var d = dice[i];
+            d.rb.isKinematic = true;
+            d.transform.localPosition = startPos[i];
+            d.transform.localRotation = startRot[i];
+            r.Pos[i] = new List<Vector3>();
+            r.Rot[i] = new List<Quaternion>();
+        }
+        Physics.SyncTransforms();
+        foreach (var d in dice)
+        {
+            d.rb.isKinematic = false;
+            d.rb.constraints = RigidbodyConstraints.None;
+            d.rb.linearVelocity = Vector3.zero;
+            d.rb.angularVelocity = UnityEngine.Random.insideUnitSphere * 0.5f;
+        }
+
+        float simTime = 0f, dt = Time.fixedDeltaTime;
+        int kicksDone = 0;
+        float kickT = -1f, nextKickAt = firstKickAt, lastKickEnd = 0f, kickHeight = 0f;
+        Quaternion kickTilt = Quaternion.identity;
+        var liftPeak = new float[n];
+        r.MinLift = float.MaxValue;
+        while (simTime < GroupMaxDuration)
+        {
+            // Start the next kick: close out the previous kick's lift, pick a fresh random strength and tilt
+            if (kickT < 0f && kicksDone < kicks && simTime >= nextKickAt)
+            {
+                if (kicksDone > 0) foreach (float p in liftPeak) r.MinLift = Mathf.Min(r.MinLift, p);
+                Array.Clear(liftPeak, 0, n);
+                kickT = simTime;
+                kickHeight = UnityEngine.Random.Range(KickHeightMin, KickHeightMax);
+                Vector2 axis = UnityEngine.Random.insideUnitCircle.normalized;
+                kickTilt = Quaternion.AngleAxis(UnityEngine.Random.Range(-KickTiltMaxDeg, KickTiltMaxDeg), new Vector3(axis.x, 0f, axis.y));
+                kicksDone++;
+            }
+
+            float offset = 0f;
+            Quaternion tilt = Quaternion.identity;
+            if (kickT >= 0f)
+            {
+                float lt = simTime - kickT;
+                if (lt > KickUpTime + KickDownTime)
+                {
+                    kickT = -1f;
+                    lastKickEnd = simTime;
+                    nextKickAt = float.MaxValue;
+                }
+                else
+                {
+                    float shape = lt < KickUpTime
+                        ? Mathf.Sin(lt / KickUpTime * Mathf.PI * 0.5f)
+                        : Mathf.Cos((lt - KickUpTime) / KickDownTime * Mathf.PI * 0.5f);
+                    offset = kickHeight * shape;
+                    tilt = Quaternion.Slerp(Quaternion.identity, kickTilt, shape);
+                }
+            }
+
+            for (int i = 0; i < n; i++) { r.Pos[i].Add(dice[i].transform.position); r.Rot[i].Add(dice[i].transform.rotation); }
+            r.FloorOffset.Add(floor.transform.localPosition.y - floorRest.y);
+            r.FloorTilt.Add(floor.transform.localRotation * Quaternion.Inverse(floorRestRot));
+
+            Vector3 targetLocal = floorRest + new Vector3(0f, offset, 0f);
+            floor.MovePosition(parent != null ? parent.TransformPoint(targetLocal) : targetLocal);
+            floor.MoveRotation((parent != null ? parent.rotation : Quaternion.identity) * tilt * floorRestRot);
+            Physics.Simulate(dt);
+            simTime += dt;
+
+            if (kicksDone > 0)
+                for (int i = 0; i < n; i++) liftPeak[i] = Mathf.Max(liftPeak[i], dice[i].transform.position.y - restY);
+
+            // Between kicks: wait until every die is back down on the felt, then pause briefly before kicking again
+            if (kickT < 0f && kicksDone < kicks && nextKickAt == float.MaxValue)
+            {
+                bool allDown = true;
+                foreach (var d in dice)
+                    if (d.transform.position.y - restY > 0.15f || Mathf.Abs(d.rb.linearVelocity.y) > 0.8f) allDown = false;
+                if (allDown || simTime - lastKickEnd > KickForceAfter)
+                    nextKickAt = simTime + UnityEngine.Random.Range(KickPauseMin, KickPauseMax);
+            }
+
+            if (kicksDone < kicks || kickT >= 0f || simTime < lastKickEnd + GroupSettleAfterKicks) continue;
+            bool settled = true;
+            foreach (var d in dice)
+            {
+                if (d.rb.linearVelocity.sqrMagnitude < MicroDampLinThreshSq)
+                { d.rb.linearVelocity *= MicroDampFactor; d.rb.angularVelocity *= MicroDampFactor; }
+                if (d.rb.linearVelocity.sqrMagnitude >= SettleLinearThresholdSq
+                    || d.rb.angularVelocity.sqrMagnitude >= SettleAngularThresholdSq) settled = false;
+            }
+            if (settled) break;
+        }
+
+        foreach (float p in liftPeak) r.MinLift = Mathf.Min(r.MinLift, p);
+        foreach (var d in dice) { d.rb.linearVelocity = Vector3.zero; d.rb.angularVelocity = Vector3.zero; }
+        for (int i = 0; i < n; i++) { r.Pos[i].Add(dice[i].transform.position); r.Rot[i].Add(dice[i].transform.rotation); }
+        floor.transform.localPosition = floorRest;
+        floor.transform.localRotation = floorRestRot;
+        r.FloorOffset.Add(0f);
+        r.FloorTilt.Add(Quaternion.identity);
+        Physics.SyncTransforms();
+        return r;
+    }
+
+    // Every die flat, and no pair stacked or intersecting.
+    static bool IsValidSettleGroup(Dice3D[] dice)
+    {
+        foreach (var d in dice) if (d.MaxFaceUpDot() < 0.95f) return false;
+        for (int i = 0; i < dice.Length; i++)
+            for (int j = i + 1; j < dice.Length; j++)
+            {
+                Vector3 a = dice[i].transform.position, b = dice[j].transform.position;
+                if (Mathf.Abs(a.y - b.y) > dice[i].dieSize * 0.6f) return false;
+                if (Vector2.Distance(new Vector2(a.x, a.z), new Vector2(b.x, b.z)) < dice[i].dieSize * 0.85f) return false;
+            }
+        return true;
     }
 
     // Local-space pre-rotation applied as (physicsRot * offset) in playback.
