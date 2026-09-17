@@ -11,7 +11,7 @@ public class ChipSelectorUI : MonoBehaviour
     {
         new Color(0.65f, 0.12f, 0.12f), // 25 — red
         new Color(0.1f, 0.35f, 0.6f),   // 100 — blue
-        new Color(0.1f, 0.1f, 0.1f),    // 500 — black
+        UIFactory.Chip500White,         // 500 — white
     };
 
     CanvasGroup group;

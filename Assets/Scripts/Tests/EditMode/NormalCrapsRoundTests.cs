@@ -163,12 +163,12 @@ public class NormalCrapsRoundTests
 
     // ── Lay bets: win on 7 ────────────────────────────────────────────────────
     // Each number: establish point, place lay bet, roll 7 — lay should pay
-    [TestCase(2, 2, NormalCrapsBetType.Lay4,  4,   50)] // 4 point, lay 4, 7 → winnings 50 (stake stays)
-    [TestCase(2, 3, NormalCrapsBetType.Lay5,  5,   66)] // 5 point
-    [TestCase(3, 3, NormalCrapsBetType.Lay6,  6,   83)] // 6 point
-    [TestCase(4, 4, NormalCrapsBetType.Lay8,  8,   83)] // 8 point
-    [TestCase(4, 5, NormalCrapsBetType.Lay9,  9,   66)] // 9 point
-    [TestCase(4, 6, NormalCrapsBetType.Lay10, 10,  50)] // 10 point
+    [TestCase(2, 2, NormalCrapsBetType.Lay4,  4,   48)] // 4 point, lay 4, 7 → winnings 50 less 5% vig (stake stays)
+    [TestCase(2, 3, NormalCrapsBetType.Lay5,  5,   63)] // 5 point
+    [TestCase(3, 3, NormalCrapsBetType.Lay6,  6,   79)] // 6 point
+    [TestCase(4, 4, NormalCrapsBetType.Lay8,  8,   79)] // 8 point
+    [TestCase(4, 5, NormalCrapsBetType.Lay9,  9,   63)] // 9 point
+    [TestCase(4, 6, NormalCrapsBetType.Lay10, 10,  48)] // 10 point
     public void Lay_WinsOn7_CorrectPayout(int pd1, int pd2, NormalCrapsBetType layType, int layNum, long expected)
     {
         // Sequence: come-out die pair → point established, then 3+4=7

@@ -31,5 +31,6 @@ public enum NormalCrapsBetType
     Lay10,
     AtsLows,   // Small: 2-3-4-5-6 all before 7, pays 30:1
     AtsHighs,  // Tall:  8-9-10-11-12 all before 7, pays 30:1
-    AtsAll     // All:   all 10 numbers before 7, pays 155:1
+    AtsAll,    // All:   all 10 numbers before 7, pays 155:1
+    CAndE      // One-roll split: craps 3:1, eleven 7:1
 }

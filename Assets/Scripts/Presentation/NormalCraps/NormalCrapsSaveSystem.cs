@@ -11,13 +11,14 @@ public static class NormalCrapsSaveSystem
 
     static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
 
-    public static void Save(Bankroll bankroll, int nextRoundIndex, List<NormalCrapsRoundRecord> records)
+    // chipsOnTable is counted into the saved balance so a crash mid-turn refunds the felt instead of losing it.
+    public static void Save(Bankroll bankroll, int nextRoundIndex, List<NormalCrapsRoundRecord> records, long chipsOnTable = 0)
     {
         try
         {
             var lines = new List<string>
             {
-                string.Join(",", bankroll.Balance, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
+                string.Join(",", bankroll.Balance + chipsOnTable, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
             };
             int start = Mathf.Max(0, records.Count - MaxSavedRecords);
             for (int i = start; i < records.Count; i++)

@@ -38,9 +38,9 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     long bestRoundNet;
     bool doubledMilestoneFired;
     readonly HashSet<int> roundMilestonesFired = new HashSet<int>();
-    long lastPassLineAmount;
-    long lastDontPassAmount;
-    readonly Dictionary<NormalCrapsBetType, long> lastOneRollBets = new Dictionary<NormalCrapsBetType, long>();
+    readonly Dictionary<NormalCrapsBetType, long> lastRollBets = new Dictionary<NormalCrapsBetType, long>();
+    long onTableAtRoll;
+    NormalCrapsRollResult pendingResult;
     readonly List<Action> undoStack = new List<Action>();
     const int MaxUndoDepth = 10;
     bool rolling;
@@ -91,7 +91,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     readonly Dictionary<int, FlatSpot>   hardSpots    = new Dictionary<int, FlatSpot>();
     readonly Dictionary<NormalCrapsBetType, FlatSpot> propSpots = new Dictionary<NormalCrapsBetType, FlatSpot>();
 
-    static readonly NormalCrapsBetType[] PropTypes = { NormalCrapsBetType.AnyCraps, NormalCrapsBetType.AnySeven, NormalCrapsBetType.AnyEleven, NormalCrapsBetType.Horn };
+    static readonly NormalCrapsBetType[] PropTypes = { NormalCrapsBetType.AnyCraps, NormalCrapsBetType.AnySeven, NormalCrapsBetType.AnyEleven, NormalCrapsBetType.Horn, NormalCrapsBetType.CAndE };
     static readonly int[] PlaceNumbers = { 4, 5, 6, 8, 9, 10 };
     static readonly int[] HardNumbers  = { 4, 6, 8, 10 };
     static readonly Color PassColor     = new Color(0.05f, 0.30f, 0.10f);
@@ -101,8 +101,16 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     static readonly Color HardColor     = new Color(0.30f, 0.10f, 0.30f);
     static readonly Color PropColor     = new Color(0.25f, 0.25f, 0.05f);
     static readonly Color PointColor    = new Color(1f, 0.85f, 0.2f);
+    // Pass-Line family green, dark enough for the white BETS ON text to read clearly
+    static readonly Color BetsOnColor   = new Color(0.12f, 0.42f, 0.18f);
 
-    static readonly Color[] ChipColors = { new Color(0.65f, 0.12f, 0.12f), new Color(0.1f, 0.35f, 0.6f), new Color(0.1f, 0.1f, 0.1f) };
+    // Chip stack X offsets chosen to sit beside each spot's label instead of on top of it
+    const float LineChipX     = -130f;
+    const float LineOddsChipX = -70f;
+    const float AtsChipX      = 84f;
+    const float FieldChipX    = -45f;
+
+    static readonly Color[] ChipColors = { new Color(0.65f, 0.12f, 0.12f), new Color(0.1f, 0.35f, 0.6f), UIFactory.Chip500White };
 
     GameObject shooterPromptRoot;
     Text shooterPromptTitleText, shooterPromptBetsText;
@@ -118,6 +126,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     long oddsModalBaseAmount;
     long oddsModalPendingAmount;
     NormalComeWager oddsModalComeWager;
+    NormalDontComeWager oddsModalDcWager;
 
     GameObject pointPuck;
 
@@ -188,8 +197,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         BuildAtsPanel(leftCx, feltW);
 
         // ── PLACE / LAY CELLS (shifted down 125px vs earlier layout) ─────
-        UIFactory.MakeText(tableRoot, "PlaceHdr", new Vector2(leftCx, 105f), 11,
-            TextAnchor.MiddleCenter, new Vector2(feltW, 18f), UIFactory.TextDim).text = "LAY  ·  PLACE";
+        MakeSectionLabel("PlaceHdr", new Vector2(leftCx, 105f), feltW, "LAY  ·  PLACE");
 
         const float cellSpacing = 100f;
         const float halfCellW   = 50f;
@@ -211,7 +219,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         if (betsToggleLabel != null) betsToggleLabel.raycastTarget = false;
 
         // ── FIELD BAR ────────────────────────────────────────────────────
-        fieldSpot = BuildFieldBar(new Vector2(leftCx, -87f), new Vector2(feltW, 70f));
+        fieldSpot = BuildFieldBar(new Vector2(leftCx, -92f), new Vector2(feltW, 80f));
 
         // ── COME | DON'T COME BAR band (below field) ─────────────────────
         float halfW = feltW / 2f;
@@ -233,6 +241,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var comeBtn = comeGO.AddComponent<Button>();
         comeBtn.targetGraphic = comeImg;
         comeBtn.onClick.AddListener(OnComeClicked);
+        RightClickRelay.Attach(comeGO, TakeDownUnparkedCome);
         UIFactory.MakeText(comeGO.transform, "ComeLabel", new Vector2(0, 8f), 13,
             TextAnchor.MiddleCenter, new Vector2(halfW - 8f, 22f), UIFactory.TextLight, FontStyle.Bold).text = "COME";
         comeAmtText = UIFactory.MakeText(comeGO.transform, "ComeAmt", new Vector2(0, -9f), 11,
@@ -254,6 +263,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var dcBtn = dcGO.AddComponent<Button>();
         dcBtn.targetGraphic = dcImg;
         dcBtn.onClick.AddListener(OnDontComeClicked);
+        RightClickRelay.Attach(dcGO, TakeDownUnparkedDontCome);
         UIFactory.MakeText(dcGO.transform, "DontComeLabel", new Vector2(0, 8f), 11,
             TextAnchor.MiddleCenter, new Vector2(halfW - 8f, 22f), UIFactory.TextLight, FontStyle.Bold).text = "DON'T COME BAR";
         dcAmtText = UIFactory.MakeText(dcGO.transform, "DontComeAmt", new Vector2(0, -9f), 11,
@@ -285,9 +295,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         dontPassSpot.OddsText.text = "";
 
         // ── RIGHT PANEL: HARDWAYS (shifted 20px down vs earlier) ─────────
-        UIFactory.MakeText(tableRoot, "HardHdr", new Vector2(rightCx, 235f), 12,
-            TextAnchor.MiddleCenter, new Vector2(rightPW - 10f, 18f),
-            UIFactory.TextLight, FontStyle.Bold).text = "HARDWAYS";
+        MakeSectionLabel("HardHdr", new Vector2(rightCx, 232f), rightPW - 10f, "HARDWAYS");
 
         float hcW = 116f, hcH = 78f;
         float hColA = rightCx - 63f, hColB = rightCx + 63f;
@@ -296,9 +304,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         hardSpots[8]  = BuildHardSpot(8,  new Vector2(hColA,  80f), hcW, hcH, "9:1");
         hardSpots[10] = BuildHardSpot(10, new Vector2(hColB,  80f), hcW, hcH, "7:1");
 
-        UIFactory.MakeText(tableRoot, "OneRollLbl", new Vector2(rightCx, 22f), 9,
-            TextAnchor.MiddleCenter, new Vector2(rightPW - 10f, 16f),
-            UIFactory.AccentDim).text = "─ ONE ROLL BETS ─";
+        MakeSectionLabel("OneRollLbl", new Vector2(rightCx, 22f), rightPW - 10f, "ONE ROLL BETS");
 
         // ── RIGHT PANEL: SEVEN + CRAPS ────────────────────────────────────
         float pcW = 116f, pcH = 70f;
@@ -312,9 +318,8 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             new Vector2(hColA, -120f), pcW, pcH, "ELEVEN",  "15:1");
         propSpots[NormalCrapsBetType.Horn]      = BuildPropSpot(NormalCrapsBetType.Horn,
             new Vector2(hColB, -120f), pcW, pcH, "HORN",    "30:1/15:1");
-        UIFactory.MakeText(tableRoot, "CELabel", new Vector2(rightCx, -168f), 10,
-            TextAnchor.MiddleCenter, new Vector2(rightPW - 10f, 16f),
-            UIFactory.TextDim).text = "C  ·  E";
+        propSpots[NormalCrapsBetType.CAndE]     = BuildPropSpot(NormalCrapsBetType.CAndE,
+            new Vector2(rightCx, -200f), pcW * 2f + 10f, 56f, "C & E", "3:1 / 7:1");
 
         // ── POINT PUCK ───────────────────────────────────────────────────
         pointPuck = new GameObject("PointPuck");
@@ -329,6 +334,13 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         pointPuck.SetActive(false);
     }
 
+    // One style for every bet-section header so the table's areas read the same way
+    static readonly Color SectionHeaderColor = new Color(1f, 0.85f, 0.1f);
+
+    void MakeSectionLabel(string name, Vector2 pos, float width, string text) =>
+        UIFactory.MakeText(tableRoot, name, pos, 13, TextAnchor.MiddleCenter,
+            new Vector2(width, 18f), SectionHeaderColor, FontStyle.Bold).text = text;
+
     void BuildAtsPanel(float leftCx, float feltW)
     {
         // Panel sits between status bar (bottom≈266) and LAY/PLACE row (top≈114)
@@ -338,14 +350,13 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             new Vector2(feltW, panelH), new Color(0.04f, 0.06f, 0.12f, 0.92f), shadow: false);
         UIFactory.AddSharpFrame(bg, new Color(0.8f, 0.7f, 0.1f, 0.7f), square: true);
 
-        UIFactory.MakeText(tableRoot, "AtsTitle", new Vector2(leftCx, 248f), 13,
-            TextAnchor.MiddleCenter, new Vector2(feltW - 20f, 18f),
-            new Color(1f, 0.85f, 0.1f, 1f), FontStyle.Bold).text = "LUCKY ROLLER";
+        // Title sits well inside the frame (panel top = 258) so the frame line doesn't clip it
+        MakeSectionLabel("AtsTitle", new Vector2(leftCx, 241f), feltW - 20f, "LUCKY ROLLER");
 
         // Three bet buttons: LOWS | ROLL ALL | HIGHS
         // Each 200px wide, 8px gap → total 616px centred in 700px felt
         const float btnW = 200f, btnH = 52f, btnGap = 8f;
-        float btnRowY = 207f;
+        float btnRowY = 202f;
         float b0x = leftCx - btnW - btnGap;   // LOWS centre
         float b1x = leftCx;                    // ROLL ALL centre
         float b2x = leftCx + btnW + btnGap;    // HIGHS centre
@@ -415,27 +426,36 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         }
     }
 
+    bool AtsBlocked()
+    {
+        if (currentRound.CanPlaceAts) return false;
+        statusText.color = UIFactory.Accent;
+        statusText.text = "Lucky Roller opens again after the next 7";
+        FlashBlocked();
+        return true;
+    }
+
     void OnAtsLowsClicked()
     {
-        if (currentRound.Phase != NormalCrapsPhase.ComeOut) { FlashBlocked(); return; }
+        if (AtsBlocked()) return;
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.AtsLows, chip, () => RebuildFlatChips(atsLowsSpot, currentRound.GetBet(NormalCrapsBetType.AtsLows), -18f))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.AtsLows, chip, () => RebuildFlatChips(atsLowsSpot, currentRound.GetBet(NormalCrapsBetType.AtsLows), AtsChipX))) return;
         PushUndoBet(NormalCrapsBetType.AtsLows, chip);
     }
 
     void OnAtsHighsClicked()
     {
-        if (currentRound.Phase != NormalCrapsPhase.ComeOut) { FlashBlocked(); return; }
+        if (AtsBlocked()) return;
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.AtsHighs, chip, () => RebuildFlatChips(atsHighsSpot, currentRound.GetBet(NormalCrapsBetType.AtsHighs), -18f))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.AtsHighs, chip, () => RebuildFlatChips(atsHighsSpot, currentRound.GetBet(NormalCrapsBetType.AtsHighs), AtsChipX))) return;
         PushUndoBet(NormalCrapsBetType.AtsHighs, chip);
     }
 
     void OnAtsAllClicked()
     {
-        if (currentRound.Phase != NormalCrapsPhase.ComeOut) { FlashBlocked(); return; }
+        if (AtsBlocked()) return;
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.AtsAll, chip, () => RebuildFlatChips(atsAllSpot, currentRound.GetBet(NormalCrapsBetType.AtsAll), -18f))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.AtsAll, chip, () => RebuildFlatChips(atsAllSpot, currentRound.GetBet(NormalCrapsBetType.AtsAll), AtsChipX))) return;
         PushUndoBet(NormalCrapsBetType.AtsAll, chip);
     }
 
@@ -454,6 +474,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => onClick());
+        RightClickRelay.Attach(go, () => TakeDown(type, label.Replace("\n", " ")));
         var labelT = UIFactory.MakeText(go.transform, "Lbl", new Vector2(0, 8), 13, TextAnchor.MiddleCenter,
             new Vector2(size.x - 8, 22), UIFactory.TextLight, FontStyle.Bold);
         labelT.text = label;
@@ -478,6 +499,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(OnFieldClicked);
+        RightClickRelay.Attach(go, () => TakeDown(NormalCrapsBetType.Field, "Field"));
 
         float hw = size.x / 2f;
         var gold = new Color(1f, 0.85f, 0.3f);
@@ -486,24 +508,33 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         // Left zone: PAYS DOUBLE above, large "2" below — pushed closer to centre
         UIFactory.MakeText(go.transform, "TwoDbl", new Vector2(-hw + 80f, 17f), 9,
             TextAnchor.MiddleCenter, new Vector2(88f, 15f), goldDim).text = "PAYS DOUBLE";
-        UIFactory.MakeText(go.transform, "Two", new Vector2(-hw + 80f, -5f), 24,
+    UIFactory.MakeText(go.transform, "Two", new Vector2(-hw + 80f, -5f), 24,
             TextAnchor.MiddleCenter, new Vector2(52f, 30f), gold, FontStyle.Bold).text = "2";
 
-        // Centre zone: numbers bigger, tighter width so they sit between 2 and 12
-        UIFactory.MakeText(go.transform, "FieldNums", new Vector2(0f, 15f), 13,
-            TextAnchor.MiddleCenter, new Vector2(size.x - 220f, 20f), UIFactory.TextDim).text = "3 · 4 · 9 · 10 · 11";
-        UIFactory.MakeText(go.transform, "FieldLbl", new Vector2(0f, -7f), 14,
+        // Centre zone: 3 · 4 · 9 · 10 · 11 evenly spaced between the 2 and 12, on a gentle arch
+        int[] fieldNums = { 3, 4, 9, 10, 11 };
+        float edgeX = hw - 80f;
+        float step = 2f * edgeX / (fieldNums.Length + 1);
+        for (int i = 0; i < fieldNums.Length; i++)
+        {
+            float x = -edgeX + step * (i + 1);
+            float t = x / edgeX;
+            float y = 2f + 22f * (1f - t * t);
+            UIFactory.MakeText(go.transform, $"FieldNum_{fieldNums[i]}", new Vector2(x, y), 17,
+                TextAnchor.MiddleCenter, new Vector2(44f, 24f), UIFactory.TextLight, FontStyle.Bold).text = fieldNums[i].ToString();
+        }
+        UIFactory.MakeText(go.transform, "FieldLbl", new Vector2(0f, -12f), 14,
             TextAnchor.MiddleCenter, new Vector2(120f, 22f), UIFactory.TextLight, FontStyle.Bold).text = "FIELD";
 
-        // Right zone: large "12" above, PAYS DOUBLE below — pushed closer to centre
+        // Right zone: large "12" above, PAYS TRIPLE below — pushed closer to centre
         UIFactory.MakeText(go.transform, "Twelve", new Vector2(hw - 80f, -5f), 24,
             TextAnchor.MiddleCenter, new Vector2(52f, 30f), gold, FontStyle.Bold).text = "12";
         UIFactory.MakeText(go.transform, "TwelveDbl", new Vector2(hw - 80f, 17f), 9,
-            TextAnchor.MiddleCenter, new Vector2(88f, 15f), goldDim).text = "PAYS DOUBLE";
+            TextAnchor.MiddleCenter, new Vector2(88f, 15f), goldDim).text = "PAYS TRIPLE";
 
         // Chip amount text (hidden by default, shown when bet placed)
-        var amtT = UIFactory.MakeText(go.transform, "Amt", new Vector2(0f, -20f), 10,
-            TextAnchor.MiddleCenter, new Vector2(120f, 16f), UIFactory.TextDim);
+        var amtT = UIFactory.MakeText(go.transform, "Amt", new Vector2(90f, -14f), 12,
+            TextAnchor.MiddleLeft, new Vector2(90f, 18f), UIFactory.TextLight);
         amtT.text = "";
         return new FlatSpot { Root = go, AmountText = amtT, DefaultLabel = "" };
     }
@@ -542,6 +573,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         layBtn.targetGraphic = layImg;
         int capturedN = n;
         layBtn.onClick.AddListener(() => OnLayClicked(capturedN));
+        RightClickRelay.Attach(layGO, () => TakeDown(NumberToLayType(capturedN), $"Lay {capturedN}"));
         UIFactory.MakeText(layGO.transform, "LoseLbl", new Vector2(0, 14), 11,
             TextAnchor.MiddleCenter, new Vector2(cellW - 4f, 16f),
             new Color(0.9f, 0.3f, 0.3f, 0.9f), FontStyle.Bold).text = "LOSE";
@@ -570,6 +602,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var placeBtn = placeGO.AddComponent<Button>();
         placeBtn.targetGraphic = placeImg;
         placeBtn.onClick.AddListener(() => OnPlaceClicked(capturedN));
+        RightClickRelay.Attach(placeGO, () => TakeDown(NumberToPlaceType(capturedN), $"Place {capturedN}"));
         UIFactory.MakeText(placeGO.transform, "WinLbl", new Vector2(0, 14), 11,
             TextAnchor.MiddleCenter, new Vector2(cellW - 4f, 16f),
             new Color(0.3f, 0.9f, 0.35f, 0.9f), FontStyle.Bold).text = "WIN";
@@ -594,6 +627,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => OnHardwayClicked(n));
+        RightClickRelay.Attach(go, () => TakeDown(NumberToHardType(n), $"Hard {n}"));
         var numT = UIFactory.MakeText(go.transform, "Num", new Vector2(0, 13), 13, TextAnchor.MiddleCenter,
             new Vector2(w - 8f, 22f), UIFactory.TextLight, FontStyle.Bold);
         numT.text = $"HARD {n}";
@@ -618,6 +652,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = img;
         btn.onClick.AddListener(() => OnPropClicked(type));
+        RightClickRelay.Attach(go, () => TakeDown(type, label.Replace("\n", " ")));
         var lblT = UIFactory.MakeText(go.transform, "Lbl", new Vector2(0, 12), 12, TextAnchor.MiddleCenter,
             new Vector2(w - 8f, 28f), UIFactory.TextLight, FontStyle.Bold);
         lblT.text = label;
@@ -661,7 +696,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             return;
         }
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.PassLine, chip, () => RebuildFlatChips(passSpot, currentRound.GetBet(NormalCrapsBetType.PassLine)))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.PassLine, chip, () => RebuildFlatChips(passSpot, currentRound.GetBet(NormalCrapsBetType.PassLine), LineChipX))) return;
         JuiceTweens.Pulse(this, (RectTransform)passSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         PushUndoBet(NormalCrapsBetType.PassLine, chip);
     }
@@ -678,7 +713,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             return;
         }
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.DontPass, chip, () => RebuildFlatChips(dontPassSpot, currentRound.GetBet(NormalCrapsBetType.DontPass)))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.DontPass, chip, () => RebuildFlatChips(dontPassSpot, currentRound.GetBet(NormalCrapsBetType.DontPass), LineChipX))) return;
         JuiceTweens.Pulse(this, (RectTransform)dontPassSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         PushUndoBet(NormalCrapsBetType.DontPass, chip);
     }
@@ -735,10 +770,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         Color fill = denomination >= 500 ? ChipColors[2] : denomination >= 100 ? ChipColors[1] : ChipColors[0];
         var go = new GameObject("WagerChip");
         go.transform.SetParent(parent, false);
-        var img = go.AddComponent<Image>();
-        img.sprite = UIFactory.Circle();
-        img.color = fill;
-        img.raycastTarget = false;
+        var img = MakeChipImage(go, fill);
         var rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(18, 18);
         rt.anchoredPosition = pos;
@@ -757,7 +789,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     void OnFieldClicked()
     {
         long chip = chipSelector.SelectedChip;
-        if (!TryPlaceBet(NormalCrapsBetType.Field, chip, () => RebuildFlatChips(fieldSpot, currentRound.GetBet(NormalCrapsBetType.Field)))) return;
+        if (!TryPlaceBet(NormalCrapsBetType.Field, chip, () => RebuildFlatChips(fieldSpot, currentRound.GetBet(NormalCrapsBetType.Field), FieldChipX))) return;
         JuiceTweens.Pulse(this, (RectTransform)fieldSpot.Root.transform, peakScale: 1.08f, duration: 0.16f);
         PushUndoBet(NormalCrapsBetType.Field, chip);
     }
@@ -821,15 +853,27 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         Color fill = denomination >= 500 ? ChipColors[2] : denomination >= 100 ? ChipColors[1] : ChipColors[0];
         var go = new GameObject("Chip");
         go.transform.SetParent(spot.Root.transform, false);
-        var img = go.AddComponent<Image>();
-        img.sprite = UIFactory.Circle();
-        img.color = fill;
-        img.raycastTarget = false;
+        var img = MakeChipImage(go, fill);
         var rt = go.GetComponent<RectTransform>();
         rt.sizeDelta = new Vector2(18, 18);
         rt.anchoredPosition = pos;
         spot.ChipVisuals.Add(go);
         JuiceTweens.PopIn(this, rt, overshoot: 1.3f, duration: 0.15f);
+    }
+
+    static Image MakeChipImage(GameObject go, Color fill)
+    {
+        var img = go.AddComponent<Image>();
+        img.sprite = UIFactory.Circle();
+        img.color = fill;
+        img.raycastTarget = false;
+        if (fill == UIFactory.Chip500White)
+        {
+            var edge = go.AddComponent<Outline>();
+            edge.effectColor = new Color(0f, 0f, 0f, 0.75f);
+            edge.effectDistance = new Vector2(1f, -1f);
+        }
+        return img;
     }
 
     void ClearChipVisuals(FlatSpot spot)
@@ -884,17 +928,14 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         }
         if (chipDenoms.Count == 0) chipDenoms.Add(denoms[0]);
         const float spacing = 10f;
-        const float chipX = 18f;
+        const float chipX = LineOddsChipX;
         float startY = -((chipDenoms.Count - 1) * spacing) / 2f;
         for (int i = 0; i < chipDenoms.Count; i++)
         {
             Color fill = chipDenoms[i] >= 500 ? ChipColors[2] : chipDenoms[i] >= 100 ? ChipColors[1] : ChipColors[0];
             var go = new GameObject("OddsChip");
             go.transform.SetParent(spot.Root.transform, false);
-            var img = go.AddComponent<Image>();
-            img.sprite = UIFactory.Circle();
-            img.color = fill;
-            img.raycastTarget = false;
+            var img = MakeChipImage(go, fill);
             var rt = go.GetComponent<RectTransform>();
             rt.sizeDelta = new Vector2(18, 18);
             rt.anchoredPosition = new Vector2(chipX, startY + i * spacing);
@@ -905,18 +946,18 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
     void RebuildAllChipVisuals()
     {
-        RebuildFlatChips(passSpot,     currentRound.GetBet(NormalCrapsBetType.PassLine), -18f);
+        RebuildFlatChips(passSpot,     currentRound.GetBet(NormalCrapsBetType.PassLine), LineChipX);
         RebuildOddsChips(passSpot,     currentRound.GetBet(NormalCrapsBetType.PassOdds));
-        RebuildFlatChips(dontPassSpot, currentRound.GetBet(NormalCrapsBetType.DontPass), -18f);
+        RebuildFlatChips(dontPassSpot, currentRound.GetBet(NormalCrapsBetType.DontPass), LineChipX);
         RebuildOddsChips(dontPassSpot, currentRound.GetBet(NormalCrapsBetType.DontPassOdds));
-        RebuildFlatChips(fieldSpot,    currentRound.GetBet(NormalCrapsBetType.Field));
+        RebuildFlatChips(fieldSpot,    currentRound.GetBet(NormalCrapsBetType.Field), FieldChipX);
         foreach (var kv in placeSpots) RebuildFlatChips(kv.Value, currentRound.GetBet(NumberToPlaceType(kv.Key)));
         foreach (var kv in laySpots)   RebuildFlatChips(kv.Value, currentRound.GetBet(NumberToLayType(kv.Key)));
         foreach (var kv in hardSpots)  RebuildFlatChips(kv.Value, currentRound.GetBet(NumberToHardType(kv.Key)));
         foreach (var kv in propSpots)  RebuildFlatChips(kv.Value, currentRound.GetBet(kv.Key));
-        if (atsLowsSpot  != null) RebuildFlatChips(atsLowsSpot,  currentRound.GetBet(NormalCrapsBetType.AtsLows),  -18f);
-        if (atsHighsSpot != null) RebuildFlatChips(atsHighsSpot, currentRound.GetBet(NormalCrapsBetType.AtsHighs), -18f);
-        if (atsAllSpot   != null) RebuildFlatChips(atsAllSpot,   currentRound.GetBet(NormalCrapsBetType.AtsAll),   -18f);
+        if (atsLowsSpot  != null) RebuildFlatChips(atsLowsSpot,  currentRound.GetBet(NormalCrapsBetType.AtsLows),  AtsChipX);
+        if (atsHighsSpot != null) RebuildFlatChips(atsHighsSpot, currentRound.GetBet(NormalCrapsBetType.AtsHighs), AtsChipX);
+        if (atsAllSpot   != null) RebuildFlatChips(atsAllSpot,   currentRound.GetBet(NormalCrapsBetType.AtsAll),   AtsChipX);
         onBankrollChanged?.Invoke();
     }
 
@@ -963,6 +1004,9 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             if (pass > 0) { currentRound.PlaceBet(NormalCrapsBetType.PassLine, -pass); refunded += pass; }
             long dont = currentRound.GetBet(NormalCrapsBetType.DontPass);
             if (dont > 0) { currentRound.PlaceBet(NormalCrapsBetType.DontPass, -dont); refunded += dont; }
+        }
+        if (currentRound.CanPlaceAts)
+        {
             long atsL = currentRound.GetBet(NormalCrapsBetType.AtsLows);
             if (atsL > 0) { currentRound.PlaceBet(NormalCrapsBetType.AtsLows, -atsL); refunded += atsL; }
             long atsH = currentRound.GetBet(NormalCrapsBetType.AtsHighs);
@@ -981,29 +1025,14 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
     void OnRepeatBetClicked()
     {
+        if (rolling) return;
         bool didAnything = false;
-        if (currentRound.Phase == NormalCrapsPhase.ComeOut)
-        {
-            if (lastPassLineAmount > 0 && currentRound.GetBet(NormalCrapsBetType.PassLine) == 0
-                && bankroll.TryWithdraw(lastPassLineAmount))
-            {
-                currentRound.PlaceBet(NormalCrapsBetType.PassLine, lastPassLineAmount);
-                roundTotalStaked += lastPassLineAmount;
-                PushUndoBet(NormalCrapsBetType.PassLine, lastPassLineAmount);
-                didAnything = true;
-            }
-            if (lastDontPassAmount > 0 && currentRound.GetBet(NormalCrapsBetType.DontPass) == 0
-                && bankroll.TryWithdraw(lastDontPassAmount))
-            {
-                currentRound.PlaceBet(NormalCrapsBetType.DontPass, lastDontPassAmount);
-                roundTotalStaked += lastDontPassAmount;
-                PushUndoBet(NormalCrapsBetType.DontPass, lastDontPassAmount);
-                didAnything = true;
-            }
-        }
-        foreach (var kv in lastOneRollBets)
+        foreach (var kv in lastRollBets)
         {
             if (currentRound.GetBet(kv.Key) > 0) continue;
+            bool lineBet = kv.Key == NormalCrapsBetType.PassLine || kv.Key == NormalCrapsBetType.DontPass;
+            if (lineBet && currentRound.Phase != NormalCrapsPhase.ComeOut) continue;
+            if (IsAtsType(kv.Key) && !currentRound.CanPlaceAts) continue;
             if (!bankroll.TryWithdraw(kv.Value)) continue;
             currentRound.PlaceBet(kv.Key, kv.Value);
             roundTotalStaked += kv.Value;
@@ -1015,6 +1044,111 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         JuiceTweens.Pulse(this, repeatBetButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
         RebuildAllChipVisuals();
         RefreshActionButtons();
+    }
+
+    static bool IsAtsType(NormalCrapsBetType t) =>
+        t == NormalCrapsBetType.AtsLows || t == NormalCrapsBetType.AtsHighs || t == NormalCrapsBetType.AtsAll;
+
+    // Right-click take-down: returns a whole spot to the wallet, following Vegas rules on what may come down.
+    void TakeDown(NormalCrapsBetType type, string label)
+    {
+        if (rolling) return;
+        var types = new List<NormalCrapsBetType> { type };
+        if (type == NormalCrapsBetType.PassLine && currentRound.Phase == NormalCrapsPhase.Point)
+        {
+            types[0] = NormalCrapsBetType.PassOdds;
+            label = "Pass Line odds";
+        }
+        else if (type == NormalCrapsBetType.DontPass)
+            types.Add(NormalCrapsBetType.DontPassOdds);
+
+        if (IsAtsType(type) && !currentRound.CanPlaceAts)
+        {
+            statusText.color = UIFactory.Accent;
+            statusText.text = "Lucky Roller can't come down mid-run";
+            FlashBlocked();
+            return;
+        }
+
+        long amount = types.Sum(t => currentRound.GetBet(t));
+        if (amount <= 0)
+        {
+            if (type == NormalCrapsBetType.PassLine && currentRound.Phase == NormalCrapsPhase.Point
+                && currentRound.GetBet(NormalCrapsBetType.PassLine) > 0)
+            {
+                statusText.color = UIFactory.Accent;
+                statusText.text = "Pass Line is locked once the point is set";
+            }
+            FlashBlocked();
+            return;
+        }
+        foreach (var t in types) currentRound.ClearBet(t);
+        ReturnToWallet(amount, label);
+        RebuildAllChipVisuals();
+        RefreshPassDontPassOddsText();
+    }
+
+    void TakeDownUnparkedCome()
+    {
+        if (rolling) return;
+        var unparked = currentRound.ComeWagers.Where(w => w.Point == null).ToList();
+        if (unparked.Count == 0) { FlashBlocked(); return; }
+        long amount = 0;
+        foreach (var w in unparked)
+        {
+            amount += w.Amount;
+            currentRound.RemoveComeWager(w);
+            if (comeChips.TryGetValue(w, out var chip)) { Destroy(chip); comeChips.Remove(w); }
+        }
+        ReturnToWallet(amount, "Come");
+        RefreshComeBarText();
+    }
+
+    void TakeDownUnparkedDontCome()
+    {
+        if (rolling) return;
+        var unparked = currentRound.DontComeWagers.Where(w => w.Point == null).ToList();
+        if (unparked.Count == 0) { FlashBlocked(); return; }
+        long amount = 0;
+        foreach (var w in unparked)
+        {
+            amount += w.Amount;
+            currentRound.RemoveDontComeWager(w);
+            if (dcChips.TryGetValue(w, out var chip)) { Destroy(chip); dcChips.Remove(w); }
+        }
+        ReturnToWallet(amount, "Don't Come");
+        RefreshComeBarText();
+    }
+
+    void ReturnToWallet(long amount, string label)
+    {
+        bankroll.Deposit(amount);
+        roundTotalStaked -= amount;
+        undoStack.Clear();
+        soundManager?.PlayClick();
+        statusText.color = UIFactory.Accent;
+        statusText.text = $"{label} down — {UIFactory.FormatMoney(amount)} back to wallet";
+        onBankrollChanged?.Invoke();
+        RefreshActionButtons();
+    }
+
+    // Every chip currently on the felt, including odds behind Come / Don't Come wagers.
+    public long OnTableTotal()
+    {
+        long total = Enum.GetValues(typeof(NormalCrapsBetType)).Cast<NormalCrapsBetType>().Sum(t => currentRound.GetBet(t));
+        total += currentRound.ComeWagers.Sum(w => w.Amount + w.OddsAmount);
+        total += currentRound.DontComeWagers.Sum(w => w.Amount + w.LayOddsAmount);
+        return total;
+    }
+
+    // Leaving the table: pay out a roll still animating, then pick every chip up and return it to the wallet.
+    // Pure bankroll/round math only — safe to call from OnDestroy / OnApplicationQuit.
+    public void RefundTableBets()
+    {
+        if (pendingResult != null) { bankroll.Deposit(pendingResult.TotalReturned); pendingResult = null; }
+        long onTable = OnTableTotal();
+        if (onTable > 0) bankroll.Deposit(onTable);
+        currentRound = new NormalCrapsRound(rng);
     }
 
     void OnUndoClicked()
@@ -1037,13 +1171,14 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             || currentRound.DontComeWagers.Any();
         if (!hasBets) { statusText.text = "Place at least one bet"; juiceManager?.MicroShake(1.2f); return; }
 
-        // Save for REPEAT BET
-        lastPassLineAmount = currentRound.GetBet(NormalCrapsBetType.PassLine);
-        lastDontPassAmount = currentRound.GetBet(NormalCrapsBetType.DontPass);
-        lastOneRollBets.Clear();
-        long fieldNow = currentRound.GetBet(NormalCrapsBetType.Field);
-        if (fieldNow > 0) lastOneRollBets[NormalCrapsBetType.Field] = fieldNow;
-        foreach (var pt in PropTypes) { long b = currentRound.GetBet(pt); if (b > 0) lastOneRollBets[pt] = b; }
+        // Save for REPEAT BET — every flat bet on the felt; odds and Come/Don't Come need a point so they're skipped
+        lastRollBets.Clear();
+        foreach (NormalCrapsBetType t in Enum.GetValues(typeof(NormalCrapsBetType)))
+        {
+            if (t == NormalCrapsBetType.PassOdds || t == NormalCrapsBetType.DontPassOdds) continue;
+            long b = currentRound.GetBet(t);
+            if (b > 0) lastRollBets[t] = b;
+        }
 
         undoStack.Clear();
         rolling = true;
@@ -1067,7 +1202,9 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         }
 
         pointBeforeRoll = currentRound.Point ?? 0;
+        onTableAtRoll = OnTableTotal();
         var result = currentRound.Roll();
+        pendingResult = result;
 
         if (die1UI != null && die2UI != null && presim != null)
             yield return StartCoroutine(Dice3D.RollPair(die1UI, result.Die1, die2UI, result.Die2, presim));
@@ -1085,6 +1222,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
     void ApplyRollResult(NormalCrapsRollResult result)
     {
+        pendingResult = null;
         long returned = result.TotalReturned;
         long net = returned - result.TotalStaked;
         bankroll.Deposit(returned);
@@ -1142,6 +1280,8 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             verdict += sideWin;
         else if (verdict == "" && net < 0)
             verdict = result.LayLosses.Count > 0 ? $" — LAY {result.LayLosses.Keys.First()} LOSES" : " — BETS LOSE";
+        else if (verdict == "" && result.DontComePushed.Count > 0)
+            verdict = " — DON'T COME PUSH";
         else if (verdict == "" && result.ComeParked.Count > 0)
             verdict = $" — COME MOVES TO {result.ComeParked[0].Point}";
         else if (verdict == "" && result.DontComeParked.Count > 0)
@@ -1231,7 +1371,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         // Per-roll row: Stake column shows the turn's stake so far; NetChange is this roll's net only
         int rowPoint = pointBeforeRoll != 0 ? pointBeforeRoll : result.NewPoint ?? 0;
         var rollRecord = new NormalCrapsRoundRecord(rollLogIndex++, rowPoint, rollCount,
-            roundTotalStaked, roundTotalStaked + net, bankroll.Balance, result.Total);
+            onTableAtRoll, onTableAtRoll + net, bankroll.Balance, result.Total);
         onRollLogged?.Invoke(rollRecord);
 
         if (result.RoundOver)
@@ -1265,6 +1405,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
                 OpenOddsModal(NormalCrapsBetType.PassOdds, "PASS LINE ODDS", pt, passBase, isDontSide: false);
             else if (dontBase > 0)
                 OpenOddsModal(NormalCrapsBetType.DontPassOdds, "DON'T PASS LAY ODDS", pt, dontBase, isDontSide: true);
+            TryOpenShooterPrompt($"POINT {pt} IS ON");
             RefreshActionButtons();
         }
 
@@ -1325,6 +1466,8 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             if (dcChips.TryGetValue(w, out var chip)) { Destroy(chip); dcChips.Remove(w); }
             if (w.Point.HasValue && placeSpots.TryGetValue(w.Point.Value, out var ps))
                 dcChips[w] = SpawnWagerChip(ps.Root.transform, w.Amount, new Vector2(-30f, -20f));
+            if (w.Point.HasValue)
+                OpenDontComeOddsModal(w);
         }
 
         // Reconcile: destroy chips for any wager silently removed by the core
@@ -1340,10 +1483,11 @@ public class NormalCrapsBettingUIController : MonoBehaviour
 
         if (result.RoundOver)
         {
-            // Places are lost only when working; Lay bets win on 7 and always stay on the table
+            // Places/hardways are lost only when working; Lay bets win on 7 and always stay on the table
             foreach (var kv in placeSpots)
                 if (currentRound.GetBet(NumberToPlaceType(kv.Key)) == 0) ClearChipVisuals(kv.Value);
-            foreach (var kv in hardSpots) ClearChipVisuals(kv.Value);
+            foreach (var kv in hardSpots)
+                if (currentRound.GetBet(NumberToHardType(kv.Key)) == 0) ClearChipVisuals(kv.Value);
         }
 
         // ATS chip visuals — clear on seven-out (bets lost) or on win (bet consumed by core)
@@ -1396,6 +1540,13 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             rollBaseColor, OnRollClicked, 20, pixelFont: true);
         repeatBetButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(+140f, btnY), new Vector2(138, 48), "REPEAT BET",
             repeatBaseColor, OnRepeatBetClicked, 13, pixelFont: true);
+
+        // Take-down tip — bottom-right corner, own frame, bright text so it reads against the dark panel
+        var tipBg = UIFactory.MakePanel(tableRoot, "TakeDownTipBg", new Vector2(+395f, btnY), new Vector2(250f, 52f),
+            UIFactory.PanelDarker, shadow: false);
+        UIFactory.AddSharpFrame(tipBg, SectionHeaderColor, square: true);
+        UIFactory.MakeText(tableRoot, "TakeDownTip", new Vector2(+395f, btnY), 13, TextAnchor.MiddleCenter,
+            new Vector2(236f, 46f), UIFactory.TextLight, FontStyle.Bold).text = "RIGHT-CLICK A BET\nTO TAKE IT DOWN";
     }
 
     void OnBetsToggleClicked()
@@ -1409,7 +1560,7 @@ public class NormalCrapsBettingUIController : MonoBehaviour
     {
         bool working = currentRound.PlaceBetsWorking;
         betsToggleButton.interactable = !rolling;
-        betsToggleButton.GetComponent<Image>().color = working ? UIFactory.Positive : UIFactory.AccentDim;
+        betsToggleButton.GetComponent<Image>().color = working ? BetsOnColor : UIFactory.AccentDim;
         if (betsToggleLabel != null) betsToggleLabel.text = working ? "BETS ON" : "BETS OFF";
     }
 
@@ -1566,6 +1717,11 @@ public class NormalCrapsBettingUIController : MonoBehaviour
             long l = currentRound.GetBet(NumberToLayType(n));
             if (l > 0) parts.Add($"Lay {n} {UIFactory.FormatMoney(l)}");
         }
+        foreach (int n in HardNumbers)
+        {
+            long h = currentRound.GetBet(NumberToHardType(n));
+            if (h > 0) parts.Add($"Hard {n} {UIFactory.FormatMoney(h)}");
+        }
         if (parts.Count == 0) return false;
 
         shooterPromptTitleText.text = title;
@@ -1590,9 +1746,17 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         oddsModalComeWager = w; // set after OpenOddsModal clears it
     }
 
+    void OpenDontComeOddsModal(NormalDontComeWager w)
+    {
+        int point = w.Point.Value;
+        OpenOddsModal(NormalCrapsBetType.DontPassOdds, $"DON'T COME LAY ODDS — {point}", point, w.Amount, isDontSide: true);
+        oddsModalDcWager = w; // set after OpenOddsModal clears it
+    }
+
     void OpenOddsModal(NormalCrapsBetType betType, string title, int point, long baseAmount, bool isDontSide)
     {
-        oddsModalComeWager = null; // clear Come context when opening for Pass/DontPass
+        oddsModalComeWager = null; // clear Come / Don't Come context when opening for Pass/DontPass
+        oddsModalDcWager = null;
         oddsModalBetType = betType;
         oddsModalPoint = point;
         oddsModalIsDontSide = isDontSide;
@@ -1671,6 +1835,11 @@ public class NormalCrapsBettingUIController : MonoBehaviour
         {
             currentRound.AddComeOdds(oddsModalComeWager, amount);
             oddsModalComeWager = null;
+        }
+        else if (oddsModalDcWager != null)
+        {
+            currentRound.AddDontComeLayOdds(oddsModalDcWager, amount);
+            oddsModalDcWager = null;
         }
         else
         {

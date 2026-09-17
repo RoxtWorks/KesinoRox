@@ -69,11 +69,15 @@ public static class NormalCrapsResolver
 
     // Lay bet against a point number — win when 7 comes first, lose when number hits first.
     // Stake auto-persists on the table after a win; only WINNINGS are paid to bankroll.
+    // Las Vegas 5% commission is taken from the winnings only (charged on win, not up front).
     public static long LayBetPayout(long stake, int number)
     {
         var (num, den) = TrueOdds(number);
-        return stake * den / num; // winnings only — stake stays at risk
+        long winnings = stake * den / num;
+        return winnings - LayCommission(winnings);
     }
+
+    public static long LayCommission(long winnings) => winnings * 5 / 100;
 
     public static long LayOddsPayout(long oddsStake, int number)
     {
@@ -86,6 +90,19 @@ public static class NormalCrapsResolver
     public static long AnyCrapsPayout(long stake, int total) => total is 2 or 3 or 12 ? stake * 8 : 0;
     public static long AnySevenPayout(long stake, int total) => total == 7 ? stake * 5 : 0;
     public static long AnyElevenPayout(long stake, int total) => total == 11 ? stake * 16 : 0;
+
+    // C&E: stake splits in half — craps half pays 7:1, eleven half pays 15:1, other half loses.
+    // Net result: 3:1 on 2/3/12, 7:1 on 11.
+    public static long CAndEPayout(long stake, int total)
+    {
+        long half = stake / 2;
+        return total switch
+        {
+            2 or 3 or 12 => half * 8,
+            11 => half * 16,
+            _ => 0
+        };
+    }
 
     public static long HornPayout(long stake, int total)
     {

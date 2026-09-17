@@ -115,14 +115,16 @@ public class NormalCrapsGameManager : MonoBehaviour
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
         rulesPanel.Build(canvasGO.transform, "STANDARD CRAPS RULES",
             "COME-OUT ROLL: 7 or 11 = natural (Pass wins), 2/3/12 = craps (Pass loses).\n" +
-            "Any other total sets the POINT.\n\n" +
-            "PASS LINE â€” wins if point repeats before a 7, pays 1:1.\n" +
-            "DON'T PASS â€” opposite of Pass. 12 on come-out is a PUSH.\n" +
-            "FIELD â€” one-roll bet: wins on 3/4/9/10/11 (1:1), 2 (2:1), 12 (2:1).\n" +
-            "PLACE â€” bet a number rolls before a 7. 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6.\n" +
-            "HARDWAYS â€” e.g. Hard 4 = two 2s. Pays 7:1 (4/10) or 9:1 (6/8).\n" +
-            "PROPS (one-roll): Any Craps 7:1, Any Seven 4:1, Eleven 15:1, Horn splits 4 ways.\n\n" +
-            "SEVEN OUT ends the shooter's turn. BETS ON/OFF: toggle Place bets working.");
+            "Any other total sets the POINT. SEVEN OUT ends the shooter's turn.\n\n" +
+            "PASS / DON'T PASS / COME / DON'T COME - the shooter's line bets, 1:1, with odds.\n" +
+            "PLACE - number before a 7: 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6.\n" +
+            "LAY - 7 before the number, true odds less 5% commission on the win.\n" +
+            "HARDWAYS - Hard 4/10 pay 7:1, Hard 6/8 pay 9:1.\n" +
+            "BETS ON/OFF covers Place, Lay and Hardways; the dealer asks at each point change.\n\n" +
+            "ONE-ROLL: Field (2 pays 2:1, 12 pays 3:1), Any Craps 7:1, Any Seven 4:1,\n" +
+            "Eleven 15:1, Horn, C&E (craps 3:1, eleven 7:1).\n" +
+            "LUCKY ROLLER: bet before a run starts; any 7 loses. Small/Tall 30:1, All 155:1.\n\n" +
+            "RIGHT-CLICK a bet to take it down (Pass Line locks once the point is set).");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -145,7 +147,7 @@ public class NormalCrapsGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -165,7 +167,7 @@ public class NormalCrapsGameManager : MonoBehaviour
                 sessionRecords.Clear();
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -189,11 +191,15 @@ public class NormalCrapsGameManager : MonoBehaviour
                 hud.Refresh();
                 sessionRecords.Add(record);
                 nextRoundIndex = record.RoundIndex + 1;
-                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             () => hud.Refresh(),
             (label, color) => resultsStrip.AddResult(label, color),
-            record => historyPanel.AddRecord(record));
+            record =>
+            {
+                historyPanel.AddRecord(record);
+                NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+            });
 
         if (NormalCrapsSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<NormalCrapsRoundRecord> loadedRecords))
@@ -257,9 +263,15 @@ public class NormalCrapsGameManager : MonoBehaviour
         foreach (Transform child in root) SetLayerRecursive(child, layer);
     }
 
-    void OnApplicationQuit()
+    // Leaving the table (quit or switching games) picks every chip up and returns it to the wallet before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
+
+    void LeaveTable()
     {
-        if (bankroll != null) NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        NormalCrapsSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
     }
 }
 

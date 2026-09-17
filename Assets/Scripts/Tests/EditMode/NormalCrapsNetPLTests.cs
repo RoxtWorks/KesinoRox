@@ -213,12 +213,41 @@ public class NormalCrapsNetPLTests
     [Test] public void Horn_11_Win()       { var r=Round(5,6); r.PlaceBet(NormalCrapsBetType.Horn,100); var res=r.Roll(); Assert.AreEqual(400,res.TotalReturned); Assert.AreEqual(100,res.TotalStaked); } // 25*16=400
     [Test] public void Horn_8_Lose()       { var r=Round(2,6); r.PlaceBet(NormalCrapsBetType.Horn,100); var res=r.Roll(); Assert.AreEqual(0,res.TotalReturned); Assert.AreEqual(100,res.TotalStaked); Assert.AreEqual(-100,res.TotalReturned-res.TotalStaked,"net -100"); }
 
-    // ── 5. HARDWAYS ──────────────────────────────────────────────────────────
+    [Test] public void CAndE_Craps_Win()   { var r=Round(1,2); r.PlaceBet(NormalCrapsBetType.CAndE,100); var res=r.Roll(); Assert.AreEqual(400,res.TotalReturned); Assert.AreEqual(100,res.TotalStaked); Assert.AreEqual(300,res.TotalReturned-res.TotalStaked,"net +300 (3:1)"); }
+    [Test] public void CAndE_12_Win()      { var r=Round(6,6); r.PlaceBet(NormalCrapsBetType.CAndE,100); var res=r.Roll(); Assert.AreEqual(300,res.TotalReturned-res.TotalStaked,"net +300 (3:1)"); }
+    [Test] public void CAndE_11_Win()      { var r=Round(5,6); r.PlaceBet(NormalCrapsBetType.CAndE,100); var res=r.Roll(); Assert.AreEqual(800,res.TotalReturned); Assert.AreEqual(700,res.TotalReturned-res.TotalStaked,"net +700 (7:1)"); }
+    [Test] public void CAndE_7_Lose()      { var r=Round(3,4); r.PlaceBet(NormalCrapsBetType.CAndE,100); var res=r.Roll(); Assert.AreEqual(0,res.TotalReturned); Assert.AreEqual(-100,res.TotalReturned-res.TotalStaked,"net -100"); Assert.AreEqual(0,r.GetBet(NormalCrapsBetType.CAndE),"one-roll bet cleared"); }
+
+    // ── 5. HARDWAYS (follow BETS ON/OFF like Place/Lay) ──────────────────────
+
+    [Test]
+    public void Hard_BetsOff_NoAction_OnHardOr7()
+    {
+        var r = Round(2, 2, 3, 4); // hard 4, then 7 — bets OFF by default
+        r.PlaceBet(NormalCrapsBetType.Hard4, 100);
+        var hard = r.Roll();
+        Assert.AreEqual(0, hard.TotalReturned, "off: hard 4 doesn't pay");
+        Assert.AreEqual(0, hard.TotalStaked,   "off: nothing resolved");
+        var seven = r.Roll();
+        Assert.AreEqual(0,   seven.TotalStaked, "off: 7 doesn't take it");
+        Assert.AreEqual(100, r.GetBet(NormalCrapsBetType.Hard4), "stake still on table");
+    }
+
+    [Test]
+    public void Hard_BetsOff_CarriesOverOnSevenOut()
+    {
+        var r = RoundWithPoint(3, 3, 3, 4); // point 6, then seven-out, bets OFF
+        r.PlaceBet(NormalCrapsBetType.Hard8, 100);
+        var res = r.Roll();
+        Assert.IsTrue(res.RoundOver);
+        Assert.IsTrue(res.PlaceBetsCarriedOver, "hardway counts as carried bet");
+        Assert.AreEqual(100, r.GetBet(NormalCrapsBetType.Hard8));
+    }
 
     [Test]
     public void Hard4_Win_NoPriorPoint()
     {
-        var r = Round(2, 2); // 4 hard on come-out
+        var r = PlaceRound(2, 2); // 4 hard on come-out, bets working
         r.PlaceBet(NormalCrapsBetType.Hard4, 100);
         var res = r.Roll();
         Assert.AreEqual(800, res.TotalReturned, "7:1 → 800");
@@ -230,6 +259,7 @@ public class NormalCrapsNetPLTests
     public void Hard4_Win_WithPoint()
     {
         var r = RoundWithPoint(3, 3, 2, 2); // point=6, then roll hard 4
+        r.PlaceBetsWorking = true;
         r.PlaceBet(NormalCrapsBetType.Hard4, 100);
         var res = r.Roll();
         Assert.AreEqual(800, res.TotalReturned);
@@ -239,7 +269,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard6_Win()
     {
-        var r = Round(3, 3); // hard 6
+        var r = PlaceRound(3, 3); // hard 6
         r.PlaceBet(NormalCrapsBetType.Hard6, 100);
         var res = r.Roll();
         Assert.AreEqual(1000, res.TotalReturned, "9:1 → 1000");
@@ -250,7 +280,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard8_Win()
     {
-        var r = Round(4, 4);
+        var r = PlaceRound(4, 4);
         r.PlaceBet(NormalCrapsBetType.Hard8, 100);
         var res = r.Roll();
         Assert.AreEqual(1000, res.TotalReturned);
@@ -260,7 +290,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard10_Win()
     {
-        var r = Round(5, 5);
+        var r = PlaceRound(5, 5);
         r.PlaceBet(NormalCrapsBetType.Hard10, 100);
         var res = r.Roll();
         Assert.AreEqual(800, res.TotalReturned);
@@ -270,7 +300,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard4_Lose_On_7()
     {
-        var r = Round(3, 4);
+        var r = PlaceRound(3, 4);
         r.PlaceBet(NormalCrapsBetType.Hard4, 100);
         var res = r.Roll();
         Assert.AreEqual(0,    res.TotalReturned);
@@ -281,7 +311,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard6_Lose_On_Easy6()
     {
-        var r = Round(4, 2); // easy 6
+        var r = PlaceRound(4, 2); // easy 6
         r.PlaceBet(NormalCrapsBetType.Hard6, 100);
         var res = r.Roll();
         Assert.AreEqual(0,   res.TotalReturned);
@@ -292,6 +322,7 @@ public class NormalCrapsNetPLTests
     public void Hard6_Lose_On_SevenOut()
     {
         var r = RoundWithPoint(2, 2, 1, 6); // point=4, roll 7
+        r.PlaceBetsWorking = true;
         r.PlaceBet(NormalCrapsBetType.Hard6, 100);
         var res = r.Roll();
         Assert.AreEqual(0,   res.TotalReturned);
@@ -335,13 +366,14 @@ public class NormalCrapsNetPLTests
 
     // ── 7. LAY BETS ──────────────────────────────────────────────────────────
     // Stake stays on table on 7-win — TotalStaked = 0 for winning Lay bets.
+    // Vegas 5% commission taken from winnings: $100 win → $95.
 
-    [Test] public void Lay4_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay4,200); var res=r.Roll(); Assert.AreEqual(100,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); Assert.AreEqual(100,res.TotalReturned-res.TotalStaked,"net +100"); }
-    [Test] public void Lay5_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay5,300); var res=r.Roll(); Assert.AreEqual(200,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
-    [Test] public void Lay6_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay6,300); var res=r.Roll(); Assert.AreEqual(250,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
-    [Test] public void Lay8_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay8,300); var res=r.Roll(); Assert.AreEqual(250,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
-    [Test] public void Lay9_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay9,300); var res=r.Roll(); Assert.AreEqual(200,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
-    [Test] public void Lay10_Win_On7()  { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay10,200); var res=r.Roll(); Assert.AreEqual(100,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
+    [Test] public void Lay4_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay4,200); var res=r.Roll(); Assert.AreEqual(95,res.TotalReturned,"100 win - 5 vig"); Assert.AreEqual(0,res.TotalStaked); Assert.AreEqual(95,res.TotalReturned-res.TotalStaked,"net +95"); }
+    [Test] public void Lay5_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay5,300); var res=r.Roll(); Assert.AreEqual(190,res.TotalReturned,"200 win - 10 vig"); Assert.AreEqual(0,res.TotalStaked); }
+    [Test] public void Lay6_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay6,300); var res=r.Roll(); Assert.AreEqual(238,res.TotalReturned,"250 win - 12 vig"); Assert.AreEqual(0,res.TotalStaked); }
+    [Test] public void Lay8_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay8,300); var res=r.Roll(); Assert.AreEqual(238,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
+    [Test] public void Lay9_Win_On7()   { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay9,300); var res=r.Roll(); Assert.AreEqual(190,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
+    [Test] public void Lay10_Win_On7()  { var r=PlaceRound(3,4); r.PlaceBet(NormalCrapsBetType.Lay10,200); var res=r.Roll(); Assert.AreEqual(95,res.TotalReturned); Assert.AreEqual(0,res.TotalStaked); }
 
     [Test] public void Lay4_Lose_On4()  { var r=PlaceRound(2,2); r.PlaceBet(NormalCrapsBetType.Lay4,200); var res=r.Roll(); Assert.AreEqual(0,res.TotalReturned); Assert.AreEqual(200,res.TotalStaked); Assert.AreEqual(-200,res.TotalReturned-res.TotalStaked,"net -200"); }
     [Test] public void Lay6_Lose_On6()  { var r=PlaceRound(3,3); r.PlaceBet(NormalCrapsBetType.Lay6,300); var res=r.Roll(); Assert.AreEqual(0,res.TotalReturned); Assert.AreEqual(300,res.TotalStaked); }
@@ -579,16 +611,16 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Mix_PassLine_Plus_Lay_SevenOut()
     {
-        // PassLine $100 loses; Lay6 $300 wins (winnings only, stake stays). Net = 250 - 100 = +150.
+        // PassLine $100 loses; Lay6 $300 wins $250 less 5% vig = $238 (stake stays). Net = 238 - 100 = +138.
         var r = new NormalCrapsRound(new FixedDiceSource(3,3, 3,4));
         r.Roll(); // point=6
         r.PlaceBet(NormalCrapsBetType.PassLine, 100);
         r.PlaceBet(NormalCrapsBetType.Lay6, 300);
         r.PlaceBetsWorking = true;
         var res = r.Roll(); // 7
-        Assert.AreEqual(250, res.TotalReturned, "Lay6 wins (winnings only, stake stays)");
+        Assert.AreEqual(238, res.TotalReturned, "Lay6 wins (winnings less vig, stake stays)");
         Assert.AreEqual(100, res.TotalStaked,   "PassLine lost (Lay6 stake stays on table)");
-        Assert.AreEqual(150, res.TotalReturned - res.TotalStaked, "net +150 GREEN on seven-out");
+        Assert.AreEqual(138, res.TotalReturned - res.TotalStaked, "net +138 GREEN on seven-out");
     }
 
     // ── 12. MIX: Hardways without point ──────────────────────────────────────
@@ -596,7 +628,7 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard_Without_Point_7_Lose()
     {
-        var r = Round(3, 4); // come-out 7 — PassLine natural
+        var r = PlaceRound(3, 4); // come-out 7 — PassLine natural, bets working
         r.PlaceBet(NormalCrapsBetType.Hard6, 100);
         r.PlaceBet(NormalCrapsBetType.Hard8, 100);
         var res = r.Roll();
@@ -608,11 +640,51 @@ public class NormalCrapsNetPLTests
     [Test]
     public void Hard_Without_Point_Win()
     {
-        var r = Round(4, 4); // hard 8
+        var r = PlaceRound(4, 4); // hard 8
         r.PlaceBet(NormalCrapsBetType.Hard8, 100);
         var res = r.Roll();
         Assert.AreEqual(1000, res.TotalReturned);
         Assert.AreEqual(100,  res.TotalStaked);
+    }
+
+    // ── 12b. ATS — Las Vegas Bonus Craps rules ───────────────────────────────
+
+    [Test]
+    public void Ats_ComeOut7_Loses()
+    {
+        var r = Round(1, 1, 3, 4); // come-out 2 (counts), then come-out natural 7
+        Assert.IsTrue(r.CanPlaceAts);
+        r.PlaceBet(NormalCrapsBetType.AtsLows, 25);
+        r.Roll();
+        Assert.IsFalse(r.CanPlaceAts, "run in progress after a number rolls");
+        var res = r.Roll();
+        Assert.IsTrue(res.AtsSevenOut, "any 7 ends the run");
+        Assert.AreEqual(25, res.TotalStaked, "ATS lost on come-out 7");
+        Assert.AreEqual(0, r.GetBet(NormalCrapsBetType.AtsLows));
+        Assert.IsTrue(r.CanPlaceAts, "can re-bet after the 7");
+    }
+
+    [Test]
+    public void Ats_CannotPlace_DuringPointPhase()
+    {
+        var r = Round(2, 2); // point 4
+        r.Roll();
+        Assert.IsFalse(r.CanPlaceAts);
+    }
+
+    [Test]
+    public void Ats_SmallWin_KeepsNumbers_AllCanStillComplete()
+    {
+        // come-out 2 → 3 (craps) → 4 point → 5 → 6 (Small done) → 8 → 9 → 10 → 11 → 12 (All done)
+        var r = Round(1,1, 1,2, 2,2, 2,3, 3,3, 4,4, 4,5, 5,5, 5,6, 6,6);
+        r.PlaceBet(NormalCrapsBetType.AtsLows, 10);
+        r.PlaceBet(NormalCrapsBetType.AtsAll, 10);
+        NormalCrapsRollResult res = null;
+        for (int i = 0; i < 5; i++) res = r.Roll();
+        Assert.AreEqual(310, res.AtsLowsReturn, "Small pays 30:1 on the 6");
+        Assert.AreEqual(0, res.AtsAllReturn, "All not done yet");
+        for (int i = 0; i < 5; i++) res = r.Roll();
+        Assert.AreEqual(1560, res.AtsAllReturn, "All pays 155:1 — Small win didn't wipe the low numbers");
     }
 
     // ── 13. MIX: Full board seven-out — all losses trackable ─────────────────

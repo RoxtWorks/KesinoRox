@@ -65,7 +65,7 @@ public class BlackjackBettingUIController : MonoBehaviour
     {
         new Color(0.65f, 0.12f, 0.12f),
         new Color(0.1f, 0.35f, 0.6f),
-        new Color(0.1f, 0.1f, 0.1f),
+        UIFactory.Chip500White,
     };
 
     GameObject insurancePromptGO;

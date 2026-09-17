@@ -46,8 +46,13 @@ public class NormalCrapsRound
     public IReadOnlyCollection<int> AtsLowsCollected  => atsLowsCollected;
     public IReadOnlyCollection<int> AtsHighsCollected => atsHighsCollected;
 
-    // Player-controlled BETS ON/OFF toggle (same as crapless version).
+    // Player-controlled BETS ON/OFF toggle (same as crapless version). Covers Place, Lay and Hardways.
     public bool PlaceBetsWorking { get; set; }
+
+    // Vegas Bonus Craps: ATS bets only go down before a run starts (no numbers collected since the last 7)
+    // and only on a come-out roll.
+    public bool CanPlaceAts => Phase == NormalCrapsPhase.ComeOut
+        && atsLowsCollected.Count == 0 && atsHighsCollected.Count == 0;
 
     public NormalCrapsRound(IRandomSource rng) { this.rng = rng; }
 
@@ -126,12 +131,15 @@ public class NormalCrapsRound
         if (anyElevenBet > 0) { result.AnyElevenReturn = NormalCrapsResolver.AnyElevenPayout(anyElevenBet, total); bets[NormalCrapsBetType.AnyEleven] = 0; result.TotalStaked += anyElevenBet; }
         long hornBet = GetBet(NormalCrapsBetType.Horn);
         if (hornBet > 0) { result.HornReturn = NormalCrapsResolver.HornPayout(hornBet, total); bets[NormalCrapsBetType.Horn] = 0; result.TotalStaked += hornBet; }
+        long ceBet = GetBet(NormalCrapsBetType.CAndE);
+        if (ceBet > 0) { result.CAndEReturn = NormalCrapsResolver.CAndEPayout(ceBet, total); bets[NormalCrapsBetType.CAndE] = 0; result.TotalStaked += ceBet; }
 
-        // 3. Hardways — lose on any 7 or easy version; win on hard version
+        // 3. Hardways — lose on any 7 or easy version; win on hard version.
+        // Like Place/Lay they only act while bets are working (Vegas: off on come-out by default).
         foreach (var t in HardTypes)
         {
             long stake = GetBet(t);
-            if (stake <= 0) continue;
+            if (stake <= 0 || !PlaceBetsWorking) continue;
             int num = HardNumber(t);
             if (total == 7) { result.TotalStaked += stake; bets[t] = 0; }
             else if (total == num)
@@ -142,49 +150,42 @@ public class NormalCrapsRound
             }
         }
 
-        // 3b. ATS (All-Tall-Small / Lucky Roller)
+        // 3b. ATS (All-Tall-Small / Lucky Roller) — Las Vegas Bonus Craps rules.
+        // Every roll counts (come-out included). ANY 7 ends the run and loses all ATS bets.
+        // Numbers stay collected until a 7 so a Small/Tall win doesn't wipe progress toward All.
         long atsLowBet  = GetBet(NormalCrapsBetType.AtsLows);
         long atsHighBet = GetBet(NormalCrapsBetType.AtsHighs);
         long atsAllBet  = GetBet(NormalCrapsBetType.AtsAll);
-        if (atsLowBet > 0 || atsHighBet > 0 || atsAllBet > 0)
+        if (total == 7)
         {
-            if (total == 7)
+            if (atsLowBet  > 0) { bets[NormalCrapsBetType.AtsLows]  = 0; result.AtsSevenOut = true; result.TotalStaked += atsLowBet; }
+            if (atsHighBet > 0) { bets[NormalCrapsBetType.AtsHighs] = 0; result.AtsSevenOut = true; result.TotalStaked += atsHighBet; }
+            if (atsAllBet  > 0) { bets[NormalCrapsBetType.AtsAll]   = 0; result.AtsSevenOut = true; result.TotalStaked += atsAllBet; }
+            atsLowsCollected.Clear();
+            atsHighsCollected.Clear();
+        }
+        else
+        {
+            if (AtsLowNums.Contains(total))  atsLowsCollected.Add(total);
+            if (AtsHighNums.Contains(total)) atsHighsCollected.Add(total);
+
+            bool lowsComplete  = AtsLowNums.All(n => atsLowsCollected.Contains(n));
+            bool highsComplete = AtsHighNums.All(n => atsHighsCollected.Contains(n));
+
+            if (atsAllBet > 0 && lowsComplete && highsComplete)
             {
-                if (Phase == NormalCrapsPhase.Point)
-                {
-                    // Seven-out: stakes consumed/lost
-                    if (atsLowBet  > 0) { bets[NormalCrapsBetType.AtsLows]  = 0; result.AtsSevenOut = true; result.TotalStaked += atsLowBet; }
-                    if (atsHighBet > 0) { bets[NormalCrapsBetType.AtsHighs] = 0; result.AtsSevenOut = true; result.TotalStaked += atsHighBet; }
-                    if (atsAllBet  > 0) { bets[NormalCrapsBetType.AtsAll]   = 0; result.AtsSevenOut = true; result.TotalStaked += atsAllBet; }
-                }
-                atsLowsCollected.Clear();
-                atsHighsCollected.Clear();
+                result.AtsAllReturn = atsAllBet * 156; result.TotalStaked += atsAllBet;
+                bets[NormalCrapsBetType.AtsAll] = 0;
             }
-            else
+            if (atsLowBet > 0 && lowsComplete)
             {
-                if (AtsLowNums.Contains(total))  atsLowsCollected.Add(total);
-                if (AtsHighNums.Contains(total)) atsHighsCollected.Add(total);
-
-                bool lowsComplete  = AtsLowNums.All(n => atsLowsCollected.Contains(n));
-                bool highsComplete = AtsHighNums.All(n => atsHighsCollected.Contains(n));
-
-                if (atsAllBet > 0 && lowsComplete && highsComplete)
-                {
-                    result.AtsAllReturn = atsAllBet * 156; result.TotalStaked += atsAllBet;
-                    bets[NormalCrapsBetType.AtsAll] = 0;
-                }
-                if (atsLowBet > 0 && lowsComplete)
-                {
-                    result.AtsLowsReturn = atsLowBet * 31; result.TotalStaked += atsLowBet;
-                    bets[NormalCrapsBetType.AtsLows] = 0;
-                }
-                if (atsHighBet > 0 && highsComplete)
-                {
-                    result.AtsHighsReturn = atsHighBet * 31; result.TotalStaked += atsHighBet;
-                    bets[NormalCrapsBetType.AtsHighs] = 0;
-                }
-                if (lowsComplete)  atsLowsCollected.Clear();
-                if (highsComplete) atsHighsCollected.Clear();
+                result.AtsLowsReturn = atsLowBet * 31; result.TotalStaked += atsLowBet;
+                bets[NormalCrapsBetType.AtsLows] = 0;
+            }
+            if (atsHighBet > 0 && highsComplete)
+            {
+                result.AtsHighsReturn = atsHighBet * 31; result.TotalStaked += atsHighBet;
+                bets[NormalCrapsBetType.AtsHighs] = 0;
             }
         }
 
@@ -384,7 +385,8 @@ public class NormalCrapsRound
                     foreach (var t in PlaceTypes) bets[t] = 0;
                 else
                     result.PlaceBetsCarriedOver = PlaceTypes.Any(t => GetBet(t) > 0)
-                        || LayTypes.Any(t => GetBet(t) > 0);
+                        || LayTypes.Any(t => GetBet(t) > 0)
+                        || HardTypes.Any(t => GetBet(t) > 0);
 
                 Phase = NormalCrapsPhase.ComeOut;
                 Point = null;

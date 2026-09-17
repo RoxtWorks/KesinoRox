@@ -1,4 +1,5 @@
-// Per-shooter-turn summary saved to disk and shown in the History panel.
+// Two uses: per-shooter-turn summary saved to disk, and per-roll History row
+// (TotalStaked = chips on the felt when the dice were thrown, NetChange = that roll's profit/loss).
 public class NormalCrapsRoundRecord
 {
     public int RoundIndex { get; }

@@ -16,6 +16,9 @@ public static class UIFactory
     public static readonly Color TextLight = new Color(0.93f, 0.92f, 0.88f);
     public static readonly Color TextDim = new Color(0.68f, 0.66f, 0.6f);
     public static readonly Color Positive = new Color(0.35f, 0.78f, 0.4f);
+    // Vegas-style white $500 chip — warm off-white so it separates from pure-white text and reads on dark felt.
+    public static readonly Color Chip500White = new Color(0.9f, 0.89f, 0.84f);
+    public static readonly Color ChipDarkText = new Color(0.1f, 0.1f, 0.12f);
     public static readonly Color Negative = new Color(0.85f, 0.32f, 0.3f);
     public static readonly Color FeltGreen = new Color(0.09f, 0.32f, 0.18f);
     public static readonly Color FeltGreenDark = new Color(0.06f, 0.22f, 0.12f);
@@ -377,6 +380,14 @@ public static class UIFactory
         var fillRt = fillGO.GetComponent<RectTransform>();
         fillRt.sizeDelta = new Vector2(diameter - 10, diameter - 10);
         fillRt.anchoredPosition = Vector2.zero;
+        bool lightChip = fillColor.grayscale > 0.6f;
+        if (lightChip)
+        {
+            // Dark edge keeps a light chip distinct from its (also light) selected ring
+            var edge = fillGO.AddComponent<Outline>();
+            edge.effectColor = new Color(0f, 0f, 0f, 0.7f);
+            edge.effectDistance = new Vector2(2f, -2f);
+        }
 
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = ringImg;
@@ -387,7 +398,7 @@ public static class UIFactory
         if (onClick != null) btn.onClick.AddListener(onClick);
 
         var text = MakeText(fillGO.transform, "Label", Vector2.zero, 16, sizeDelta: new Vector2(diameter - 10, diameter - 10),
-            color: TextLight, style: FontStyle.Bold);
+            color: lightChip ? ChipDarkText : TextLight, style: FontStyle.Bold);
         text.text = label;
 
         // No extra sharp-frame overlay here (unlike other chip-shaped elements) —

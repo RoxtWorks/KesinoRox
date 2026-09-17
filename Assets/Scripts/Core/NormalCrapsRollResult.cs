@@ -16,6 +16,7 @@ public class NormalCrapsRollResult
     public long AnySevenReturn;
     public long AnyElevenReturn;
     public long HornReturn;
+    public long CAndEReturn;
 
     // number -> payout (winnings only for place, stake+winnings for hardways)
     public readonly Dictionary<int, long> PlaceHits   = new Dictionary<int, long>();
@@ -58,14 +59,14 @@ public class NormalCrapsRollResult
     public long AtsLowsReturn;   // 0 or stake*31
     public long AtsHighsReturn;  // 0 or stake*31
     public long AtsAllReturn;    // 0 or stake*156
-    public bool AtsSevenOut;     // 7 in point phase → ATS bets lost
+    public bool AtsSevenOut;     // any 7 (come-out or seven-out) → ATS run over, bets lost
 
     // All bet stakes consumed/resolved this roll (wins + losses).
     // net = TotalReturned - TotalStaked = true profit/loss per roll.
     public long TotalStaked;
 
     public long TotalReturned =>
-        FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn
+        FieldReturn + AnyCrapsReturn + AnySevenReturn + AnyElevenReturn + HornReturn + CAndEReturn
         + PlaceHits.Values.Sum() + HardwayHits.Values.Sum()
         + LayHits.Values.Sum()
         + ComeReturns.Values.Sum() + PassReturn + DontPassReturn

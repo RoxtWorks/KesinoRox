@@ -4,8 +4,9 @@ using UnityEngine.UI;
 
 public class NormalCrapsHistoryPanelUI : MonoBehaviour
 {
-    static readonly float[] ColX = { 0f, 28f, 56f, 84f, 146f, 210f };
-    static readonly float[] ColW = { 28f, 28f, 28f, 62f, 64f, 75f };
+    // # · Roll · Pt · On Table · +/- · Bal — one row per physical roll
+    static readonly float[] ColX = { 0f, 28f, 62f, 88f, 152f, 212f };
+    static readonly float[] ColW = { 28f, 34f, 26f, 64f, 60f, 73f };
     const float ContentWidth = 285f;
     const float RowHeight = 26f;
     const int MaxStored = 300;
@@ -29,9 +30,9 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
         headerRt.sizeDelta = new Vector2(ContentWidth, RowHeight);
         headerRt.anchoredPosition = anchoredPos + new Vector2(-ContentWidth / 2f, size.y / 2f - 46f);
         MakeRowText(headerRow.transform, "#",     0, UIFactory.Accent, FontStyle.Bold);
-        MakeRowText(headerRow.transform, "Pt",    1, UIFactory.Accent, FontStyle.Bold);
-        MakeRowText(headerRow.transform, "R",     2, UIFactory.Accent, FontStyle.Bold);
-        MakeRowText(headerRow.transform, "Stake", 3, UIFactory.Accent, FontStyle.Bold);
+        MakeRowText(headerRow.transform, "Roll",  1, UIFactory.Accent, FontStyle.Bold);
+        MakeRowText(headerRow.transform, "Pt",    2, UIFactory.Accent, FontStyle.Bold);
+        MakeRowText(headerRow.transform, "Table", 3, UIFactory.Accent, FontStyle.Bold);
         MakeRowText(headerRow.transform, "+/-",   4, UIFactory.Accent, FontStyle.Bold);
         MakeRowText(headerRow.transform, "Bal",   5, UIFactory.Accent, FontStyle.Bold);
 
@@ -123,8 +124,8 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
             string sign = rec.NetChange >= 0 ? "+" : "";
 
             MakeRowText(rowGO.transform, $"{rec.RoundIndex + 1}", 0);
-            MakeRowText(rowGO.transform, rec.FinalPoint > 0 ? $"{rec.FinalPoint}" : "-", 1);
-            MakeRowText(rowGO.transform, $"{rec.RollCount}", 2);
+            MakeRowText(rowGO.transform, $"{rec.RollTotal}", 1, netColor, FontStyle.Bold);
+            MakeRowText(rowGO.transform, rec.FinalPoint > 0 ? $"{rec.FinalPoint}" : "-", 2);
             MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.TotalStaked), 3);
             MakeRowText(rowGO.transform, $"{sign}{UIFactory.FormatMoney(rec.NetChange)}", 4, netColor);
             MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.BalanceAfter), 5);
