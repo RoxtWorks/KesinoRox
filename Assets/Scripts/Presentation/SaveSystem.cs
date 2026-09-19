@@ -5,11 +5,8 @@ using System.IO;
 using UnityEngine;
 
 // Plain-text session save — bankroll plus every spin this session — so relaunching
-// the app picks up exactly where it left off. Written next to the running .exe;
-// Application.dataPath's parent resolves to the right folder either way: for a
-// build that's "<Build>/RouletteSim_Data" -> parent is the folder holding the exe,
-// and in the Editor it's "<Project>/Assets" -> parent is the project root.
-// Reload replays every record through the same AddRecord/AddSpin paths a live spin
+// the app picks up exactly where it left off. Lives in the per-player data folder
+// (see SavePaths). Reload replays every record through the same AddRecord/AddSpin paths a live spin
 // uses, so History/P-L/Hot-Cold/Recent-Spins come back too, not just the balance.
 public static class SaveSystem
 {
@@ -19,7 +16,7 @@ public static class SaveSystem
     // history than anything on screen will ever use.
     const int MaxSavedRecords = 500;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash with chips on the felt refunds them instead of losing them.
     public static void Save(Bankroll bankroll, int nextSpinIndex, List<SpinRecord> records, long chipsOnTable = 0)
@@ -80,6 +77,7 @@ public static class SaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"SaveSystem: failed to load '{FilePath}' — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

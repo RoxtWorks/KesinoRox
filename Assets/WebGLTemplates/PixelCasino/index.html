@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1.0, user-scalable=no">
+    <title>{{{ PRODUCT_NAME }}}</title>
+    <style>
+      html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #121211; }
+      #frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+      #unity-canvas { display: block; background: #121211; outline: none; image-rendering: auto; }
+      #loading { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+                 color: #e8e4d8; font-family: "Courier New", monospace; font-weight: bold; letter-spacing: 2px; gap: 16px; }
+      #loading .title { font-size: 28px; color: #f0c446; text-shadow: 3px 3px 0 #000; }
+      #bar { width: 320px; height: 20px; border: 3px solid #e8e4d8; background: #22221f; box-shadow: 4px 4px 0 #000; }
+      #bar-fill { width: 0%; height: 100%; background: #3fa45a; }
+      #fullscreen { position: absolute; right: 10px; bottom: 10px; width: 34px; height: 34px; border: 2px solid #e8e4d8;
+                    background: rgba(0,0,0,0.55); color: #e8e4d8; font: bold 18px monospace; cursor: pointer; display: none; }
+      #fullscreen:hover { background: rgba(60,60,55,0.8); }
+      #warning { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); font: 14px sans-serif; color: #000; }
+    </style>
+  </head>
+  <body>
+    <div id="frame">
+      <canvas id="unity-canvas" width="{{{ WIDTH }}}" height="{{{ HEIGHT }}}" tabindex="-1"></canvas>
+    </div>
+    <div id="loading">
+      <div class="title">{{{ PRODUCT_NAME }}}</div>
+      <div id="bar"><div id="bar-fill"></div></div>
+      <div id="loading-text">LOADING...</div>
+    </div>
+    <button id="fullscreen" title="Fullscreen">&#x26F6;</button>
+    <div id="warning"></div>
+    <script>
+      var canvas = document.querySelector("#unity-canvas");
+
+      // Keep the game at 16:9, as large as the page (the itch.io frame) allows
+      function fit() {
+        var w = window.innerWidth, h = window.innerHeight;
+        if (w / h > 16 / 9) w = Math.floor(h * 16 / 9); else h = Math.floor(w * 9 / 16);
+        canvas.style.width = w + "px";
+        canvas.style.height = h + "px";
+      }
+      window.addEventListener("resize", fit);
+      fit();
+
+      // Right-click takes bets down in-game, so the browser's own menu must not open over the game
+      canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+      document.addEventListener("contextmenu", function (e) { if (e.target === canvas) e.preventDefault(); });
+
+      function showBanner(msg, type) {
+        var div = document.createElement("div");
+        div.innerHTML = msg;
+        div.style = "padding: 8px 12px; margin-bottom: 4px; background: " + (type == "error" ? "#e05050" : "#f0c446") + ";";
+        document.querySelector("#warning").appendChild(div);
+        if (type != "error") setTimeout(function () { div.remove(); }, 5000);
+      }
+
+      var buildUrl = "Build";
+      var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
+      var config = {
+        arguments: [],
+        dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
+        frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
+#if USE_THREADS
+        workerUrl: buildUrl + "/{{{ WORKER_FILENAME }}}",
+#endif
+#if USE_WASM
+        codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
+#endif
+#if SYMBOLS_FILENAME
+        symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
+#endif
+        streamingAssetsUrl: "StreamingAssets",
+        companyName: {{{ JSON.stringify(COMPANY_NAME) }}},
+        productName: {{{ JSON.stringify(PRODUCT_NAME) }}},
+        productVersion: {{{ JSON.stringify(PRODUCT_VERSION) }}},
+        showBanner: showBanner,
+        // Saves live in the browser's storage; this writes them there as soon as the game saves,
+        // so progress is still there on the next visit
+        autoSyncPersistentDataPath: true,
+      };
+
+      var script = document.createElement("script");
+      script.src = loaderUrl;
+      script.onload = function () {
+        createUnityInstance(canvas, config, function (progress) {
+          document.querySelector("#bar-fill").style.width = Math.round(100 * progress) + "%";
+        }).then(function (unityInstance) {
+          document.querySelector("#loading").style.display = "none";
+          var fs = document.querySelector("#fullscreen");
+          fs.style.display = "block";
+          fs.onclick = function () { unityInstance.SetFullscreen(1); };
+        }).catch(function (message) {
+          alert(message);
+        });
+      };
+      document.body.appendChild(script);
+    </script>
+  </body>
+</html>

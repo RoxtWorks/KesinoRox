@@ -892,6 +892,12 @@ public class BettingUIController : MonoBehaviour
             : "Press SPIN again";
         statusText.text = $"{winningNumber} {color}  ({(net >= 0 ? "+" : "")}{UIFactory.FormatMoney(net)})  — {flavor}";
 
+        // The spun chips are settled — take them off the felt before the save below, or it counts them
+        // as still on the table and adds them back to the saved balance
+        lastBets = bets;
+        pendingBets.Clear();
+        ClearChipVisuals();
+
         var record = new SpinRecord(spinIndex++, winningNumber, totalStake, totalReturned, bankroll.Balance);
         onSpinResolved?.Invoke(record);
 
@@ -968,9 +974,6 @@ public class BettingUIController : MonoBehaviour
 
         CheckMilestones();
 
-        lastBets = bets;
-        pendingBets.Clear();
-        ClearChipVisuals();
         RefreshBetTray();
         RecalculatePotentials();
         spinButton.interactable = true;

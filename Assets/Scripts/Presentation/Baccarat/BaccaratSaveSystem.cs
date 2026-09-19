@@ -11,7 +11,7 @@ public static class BaccaratSaveSystem
     const string FileName = "baccaratsim_save.txt";
     public const int MaxSavedRecords = 30;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash with bets on the felt refunds them instead of losing them.
     public static void Save(Bankroll bankroll, int nextRoundIndex, List<BaccaratRoundRecord> records, long chipsOnTable = 0)
@@ -75,6 +75,7 @@ public static class BaccaratSaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"BaccaratSaveSystem: failed to load '{FilePath}' — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

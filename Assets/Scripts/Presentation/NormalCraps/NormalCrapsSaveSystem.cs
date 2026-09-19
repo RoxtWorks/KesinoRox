@@ -11,7 +11,7 @@ public static class NormalCrapsSaveSystem
     const int MaxSavedRecords = 500;
     public const int MaxSavedRolls = 30;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash mid-turn refunds the felt instead of losing it.
     public static void Save(Bankroll bankroll, int nextRoundIndex, List<NormalCrapsRoundRecord> records,
@@ -83,6 +83,7 @@ public static class NormalCrapsSaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"NormalCrapsSaveSystem: load failed — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

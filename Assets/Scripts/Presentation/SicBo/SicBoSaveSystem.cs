@@ -10,7 +10,7 @@ public static class SicBoSaveSystem
     const string FileName = "sicbosim_save.txt";
     public const int MaxSavedRolls = 30;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash with chips on the felt refunds them instead of losing them.
     public static void Save(Bankroll bankroll, int nextRoundIndex, List<SicBoRoundRecord> records, long chipsOnTable = 0)
@@ -75,6 +75,7 @@ public static class SicBoSaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"SicBoSaveSystem: load failed — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

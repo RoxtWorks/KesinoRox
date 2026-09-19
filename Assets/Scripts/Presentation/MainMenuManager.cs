@@ -26,9 +26,11 @@ public class MainMenuManager : MonoBehaviour
         "\"26 5am - Goodbye\" — Towball's Crossing\n" +
         "towball.itch.io/towballs-crossing\n\n" +
         "<b>SOUND EFFECTS</b>\n" +
-        "Chip, Click, Win, Lose, Reset, Add Money, Tsk\n\n" +
+        "Ultimate UI SFX Pack — JDSherbert\n" +
+        "jdsherbert.itch.io\n\n" +
         "<b>FONTS</b>\n" +
-        "BoldPixels\n\n" +
+        "BoldPixels Font by Yūki (@YukiPixels), CC BY-SA 4.0\n" +
+        "yukipixels.itch.io/boldpixels\n\n" +
         "<b>UI / VISUALS</b>\n" +
         "Fantasy UI Borders — Kenney (kenney.nl), CC0\n\n" +
         "<b>PLUGINS</b>\n" +
@@ -73,7 +75,8 @@ public class MainMenuManager : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         canvasGO.AddComponent<GraphicRaycaster>();
 
-        UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
+        // No CLOSE APP in a browser — a web page can't close its own tab
+        if (Application.platform != RuntimePlatform.WebGLPlayer) UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
             {
 #if UNITY_EDITOR
@@ -90,8 +93,9 @@ public class MainMenuManager : MonoBehaviour
         creditsPanel.Build(canvasGO.transform, "CREDITS", CreditsText);
 
         var title = MakePixelText(canvasGO.transform, "TitleText", new Vector2(0, 300), 96,
-            new Vector2(1100, 160), ThemeAccent, FontStyles.Bold);
-        title.text = "CASINO SIM";
+            new Vector2(1400, 230), ThemeAccent, FontStyles.Bold);
+        title.text = "PIXEL CASINO\n<size=62%>SIMULATOR</size>";
+        title.lineSpacing = -10f;
         title.enableVertexGradient = true;
         title.colorGradient = new VertexGradient(
             new Color(0.9f, 0.95f, 1f), new Color(0.9f, 0.95f, 1f),

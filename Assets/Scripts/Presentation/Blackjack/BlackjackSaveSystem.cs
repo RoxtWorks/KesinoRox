@@ -12,7 +12,7 @@ public static class BlackjackSaveSystem
     const string FileName = "blackjacksim_save.txt";
     public const int MaxSavedRecords = 30;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash with a bet on the felt refunds it instead of losing it.
     public static void Save(Bankroll bankroll, int nextRoundIndex, List<BlackjackRoundRecord> records, long chipsOnTable = 0)
@@ -75,6 +75,7 @@ public static class BlackjackSaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"BlackjackSaveSystem: failed to load '{FilePath}' — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

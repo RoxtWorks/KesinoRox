@@ -12,7 +12,7 @@ public static class ThreePicturesSaveSystem
     public const int MaxSavedRounds = 30;
     const int RoundFields = 6 + 3 * ThreePicturesRound.MaxHands;
 
-    static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
+    static string FilePath => SavePaths.For(FileName);
 
     // chipsOnTable is counted into the saved balance so a crash with chips on the felt refunds them instead of losing them.
     public static void Save(Bankroll bankroll, int nextRoundIndex, List<ThreePicturesRoundRecord> records, long chipsOnTable = 0)
@@ -98,6 +98,7 @@ public static class ThreePicturesSaveSystem
         catch (Exception e)
         {
             Debug.LogWarning($"ThreePicturesSaveSystem: load failed — {e.Message}");
+            SavePaths.KeepBadCopy(FilePath); // keep the unreadable file rather than let the next save overwrite it
             return false;
         }
     }

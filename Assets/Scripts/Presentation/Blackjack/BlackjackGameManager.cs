@@ -102,7 +102,8 @@ public class BlackjackGameManager : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-        UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
+        // No CLOSE APP in a browser — a web page can't close its own tab
+        if (Application.platform != RuntimePlatform.WebGLPlayer) UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
             {
 #if UNITY_EDITOR

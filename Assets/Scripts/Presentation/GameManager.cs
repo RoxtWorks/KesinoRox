@@ -161,7 +161,8 @@ public class GameManager : MonoBehaviour
         // and the felt below. #if UNITY_EDITOR branch is needed because
         // Application.Quit() is a no-op in the Editor — without it this button would
         // do nothing when testing in Play mode.
-        UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
+        // No CLOSE APP in a browser — a web page can't close its own tab
+        if (Application.platform != RuntimePlatform.WebGLPlayer) UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
             {
 #if UNITY_EDITOR
