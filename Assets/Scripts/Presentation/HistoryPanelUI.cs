@@ -101,7 +101,7 @@ public class HistoryPanelUI : MonoBehaviour
         Rebuild(animateNewest: true);
 
         Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
+        scrollRect.verticalNormalizedPosition = 1f;
     }
 
     public void Clear()
@@ -123,7 +123,7 @@ public class HistoryPanelUI : MonoBehaviour
         if (records.Count > MaxStored) records.RemoveRange(0, records.Count - MaxStored);
         Rebuild(animateNewest: false);
         Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
+        scrollRect.verticalNormalizedPosition = 1f;
     }
 
     void Rebuild(bool animateNewest)
@@ -135,7 +135,7 @@ public class HistoryPanelUI : MonoBehaviour
 
         for (int i = 0; i < records.Count; i++)
         {
-            var rec = records[i];
+            var rec = records[records.Count - 1 - i]; // newest on top, same as the other tables
             var rowGO = new GameObject($"Row_{i}");
             rowGO.transform.SetParent(content, false);
             var rowRt = rowGO.AddComponent<RectTransform>();
@@ -156,7 +156,7 @@ public class HistoryPanelUI : MonoBehaviour
             MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.BalanceAfter), 4);
 
             rowObjects.Add(rowGO);
-            if (animateNewest && i == records.Count - 1) JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);
+            if (animateNewest && i == 0) JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);
         }
 
         if (records.Count == 0)

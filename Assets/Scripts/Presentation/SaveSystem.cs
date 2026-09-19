@@ -21,13 +21,14 @@ public static class SaveSystem
 
     static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
 
-    public static void Save(Bankroll bankroll, int nextSpinIndex, List<SpinRecord> records)
+    // chipsOnTable is counted into the saved balance so a crash with chips on the felt refunds them instead of losing them.
+    public static void Save(Bankroll bankroll, int nextSpinIndex, List<SpinRecord> records, long chipsOnTable = 0)
     {
         try
         {
             var lines = new List<string>
             {
-                string.Join(",", bankroll.Balance, bankroll.StartingBalance, bankroll.TotalFunded, nextSpinIndex)
+                string.Join(",", bankroll.Balance + chipsOnTable, bankroll.StartingBalance, bankroll.TotalFunded, nextSpinIndex)
             };
             int start = Mathf.Max(0, records.Count - MaxSavedRecords);
             for (int i = start; i < records.Count; i++)

@@ -16,15 +16,21 @@ public class BettingUIController : MonoBehaviour
     ChipSelectorUI chipSelector;
     SpinResultGenerator generator;
     ConveyorBeltUI belt;
-    WheelSpinAnimator wheelAnimator;
-    RouletteTableBuilder tableBuilder;
+    IRouletteWheel wheel;
     PastSpinsStripUI pastSpinsStrip;
     SoundManager soundManager;
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
     Action<SpinRecord> onSpinResolved;
+    Action onBankrollChanged;
     int spinIndex;
+
+    // The spin currently rolling: its result is decided the moment SPIN is pressed, so
+    // leaving mid-reveal can still pay it out (see RefundTableBets).
+    bool spinInFlight;
+    List<Bet> spinBets;
+    int spinWinningNumber;
     int winStreak;
 
     // Rotated randomly so the same phrase doesn't repeat every single spin across a
@@ -117,17 +123,30 @@ public class BettingUIController : MonoBehaviour
     const float GridTop = 76;
     const float PanelCenterX = 0f;
 
-    public void Build(Transform canvas, Bankroll bankroll, ChipSelectorUI chipSelector,
-        SpinResultGenerator generator, ConveyorBeltUI belt, WheelSpinAnimator wheelAnimator, RouletteTableBuilder tableBuilder,
-        PastSpinsStripUI pastSpinsStrip, Vector2 betTrayPos, Vector2 betTraySize, SoundManager soundManager,
-        JuiceManager juiceManager, FloatingTextUI floatingText, FloatingTextUI milestoneToast, Action<SpinRecord> onSpinResolved)
+    static readonly Color RailColor = new Color(0.30f, 0.22f, 0.10f);
+    static readonly Color ZeroGreen = new Color(0.10f, 0.50f, 0.22f);
+    static readonly Color OutsideFelt = new Color(0.07f, 0.30f, 0.16f); // dozens, columns, even-money boxes
+    // Split / street / corner / six-line spots: faint white lines and dots on the felt, like a real layout
+    static readonly Color InsideSpotColor = new Color(1f, 1f, 1f, 0.22f);
+    static readonly Color[] ChipColors =
     {
+        new Color(0.65f, 0.12f, 0.12f),
+        new Color(0.1f, 0.35f, 0.6f),
+        UIFactory.Chip500White,
+    };
+
+    public void Build(Transform canvas, Bankroll bankroll, ChipSelectorUI chipSelector,
+        SpinResultGenerator generator, ConveyorBeltUI belt, IRouletteWheel wheel,
+        PastSpinsStripUI pastSpinsStrip, Vector2 betTrayPos, Vector2 betTraySize, SoundManager soundManager,
+        JuiceManager juiceManager, FloatingTextUI floatingText, FloatingTextUI milestoneToast, Action<SpinRecord> onSpinResolved,
+        Action onBankrollChanged)
+    {
+        this.onBankrollChanged = onBankrollChanged;
         this.bankroll = bankroll;
         this.chipSelector = chipSelector;
         this.generator = generator;
         this.belt = belt;
-        this.wheelAnimator = wheelAnimator;
-        this.tableBuilder = tableBuilder;
+        this.wheel = wheel;
         this.pastSpinsStrip = pastSpinsStrip;
         this.soundManager = soundManager;
         this.juiceManager = juiceManager;
@@ -155,8 +174,17 @@ public class BettingUIController : MonoBehaviour
         // stay at their original 195/155 — that spacing was already correct against
         // the grid below (GridTop=76, top row edge ~111); the actual bug was the
         // panel being too short, not the header/status positions themselves.
-        UIFactory.MakePanel(tableRoot, "BettingPanelBg", new Vector2(PanelCenterX, -90), new Vector2(TotalWidth + 60, 710), UIFactory.PanelDark);
-        UIFactory.MakeHeroTitle(tableRoot, "Header_BettingTable", new Vector2(PanelCenterX, 195), "BETTING TABLE", 26);
+        // Green felt with a wooden rail, same as the other tables
+        var feltCenter = new Vector2(PanelCenterX, -90);
+        var feltSize = new Vector2(TotalWidth + 60, 710);
+        var rail = UIFactory.MakePanel(tableRoot, "FeltRail", feltCenter, feltSize + new Vector2(24f, 24f), RailColor);
+        UIFactory.AddSharpFrame(rail, new Color(0.62f, 0.52f, 0.25f), square: true);
+        UIFactory.MakePanel(tableRoot, "Felt", feltCenter, feltSize, UIFactory.FeltGreen, shadow: false);
+        // Take-down tip where the "BETTING TABLE" title used to sit — same framed line as the other tables
+        var tip = UIFactory.MakePanel(tableRoot, "TakeDownTipBg", new Vector2(PanelCenterX, 197), new Vector2(360f, 26f), UIFactory.PanelDarker, shadow: false);
+        UIFactory.AddSharpFrame(tip, UIFactory.AccentDim, square: true);
+        UIFactory.MakeText(tableRoot, "TakeDownTip", new Vector2(PanelCenterX, 197), 14, TextAnchor.MiddleCenter,
+            new Vector2(350f, 24f), UIFactory.TextLight).text = "RIGHT-CLICK a bet to take it down";
 
         var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, 155), new Vector2(720, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
@@ -174,18 +202,18 @@ public class BettingUIController : MonoBehaviour
         streakBadgeGO = new GameObject("StreakBadge");
         streakBadgeGO.transform.SetParent(canvas, false);
         var streakBadgeRt = streakBadgeGO.AddComponent<RectTransform>();
-        streakBadgeRt.sizeDelta = new Vector2(260, 90);
-        streakBadgeRt.anchoredPosition = new Vector2(-480, 465);
-        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(260, 90), Color.black);
+        streakBadgeRt.sizeDelta = new Vector2(260, 36);
+        streakBadgeRt.anchoredPosition = new Vector2(0, 310); // between the number strip and the felt
+        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(260, 36), Color.black);
 
         var streakGO = new GameObject("StreakText");
         streakGO.transform.SetParent(streakBadgeGO.transform, false);
         var streakRt = streakGO.AddComponent<RectTransform>();
-        streakRt.sizeDelta = new Vector2(240, 70);
+        streakRt.sizeDelta = new Vector2(250, 32);
         streakRt.anchoredPosition = Vector2.zero;
         streakText = streakGO.AddComponent<TextMeshProUGUI>();
         streakText.alignment = TextAlignmentOptions.Center;
-        streakText.fontSize = 30;
+        streakText.fontSize = 20;
         streakText.fontStyle = FontStyles.Bold;
         streakText.raycastTarget = false;
         streakText.outlineWidth = 0.25f;
@@ -268,11 +296,24 @@ public class BettingUIController : MonoBehaviour
     static float ColX(int c) => GridLeft + c * (CellW + ColGap);
     static float RowY(int r) => GridTop - r * (CellH + RowGap);
 
-    void RegisterSpot(BetType type, int[] numbers, Vector2 pos, float chipSize = 30f)
+    void RegisterSpot(Button spot, BetType type, int[] numbers, Vector2 pos, float chipSize = 30f)
     {
         string key = new Bet(type, 0, numbers).TargetKey();
         betSpotPositions[key] = pos;
         betSpotChipSizes[key] = chipSize;
+        RightClickRelay.Attach(spot.gameObject, () => TakeDown(key));
+
+        // The split / street / corner / six-line spots are unlabeled lines and dots, like a real
+        // felt — hovering one names the bet and what it pays.
+        string tip = type switch
+        {
+            BetType.Split => $"Split {string.Join(" / ", numbers)}  ·  pays 17 to 1",
+            BetType.Street => $"Street {string.Join(" / ", numbers.OrderBy(n => n))}  ·  pays 11 to 1",
+            BetType.Corner => $"Corner {string.Join(" / ", numbers.OrderBy(n => n))}  ·  pays 8 to 1",
+            BetType.SixLine => $"Six line {numbers.Min()}-{numbers.Max()}  ·  pays 5 to 1",
+            _ => null
+        };
+        if (tip != null) spot.gameObject.AddComponent<TooltipTrigger>().Text = tip;
     }
 
     void BuildNumberGrid(Transform canvas)
@@ -281,8 +322,8 @@ public class BettingUIController : MonoBehaviour
         float zeroY = (RowY(0) + RowY(Rows - 1)) / 2f;
         float zeroH = CellH * Rows + RowGap * (Rows - 1);
         var zeroBtn = UIFactory.MakeButton(canvas, "Num_0", new Vector2(zeroX, zeroY),
-            new Vector2(CellW, zeroH), "0", UIFactory.FeltGreen, () => PlaceStraight(0), 26);
-        RegisterSpot(BetType.Straight, new[] { 0 }, new Vector2(zeroX, zeroY));
+            new Vector2(CellW, zeroH), "0", ZeroGreen, () => PlaceStraight(0), 26);
+        RegisterSpot(zeroBtn, BetType.Straight, new[] { 0 }, new Vector2(zeroX, zeroY));
         CreatePotentialLabel(0, new Vector2(zeroX, zeroY), CellW, zeroH);
         numberCellRects[0] = zeroBtn.GetComponent<RectTransform>();
 
@@ -295,7 +336,7 @@ public class BettingUIController : MonoBehaviour
                 var pos = new Vector2(ColX(col), RowY(row));
                 var numBtn = UIFactory.MakeButton(canvas, $"Num_{n}", pos, new Vector2(CellW, CellH),
                     n.ToString(), c, () => PlaceStraight(n), 26);
-                RegisterSpot(BetType.Straight, new[] { n }, pos);
+                RegisterSpot(numBtn, BetType.Straight, new[] { n }, pos);
                 CreatePotentialLabel(n, pos, CellW, CellH);
                 numberCellRects[n] = numBtn.GetComponent<RectTransform>();
             }
@@ -303,7 +344,7 @@ public class BettingUIController : MonoBehaviour
     }
 
     // Centered directly under the number — sitting in the corner made it read as
-    // attached to the neighbouring "C" corner-bet marker instead of to the number
+    // attached to the neighbouring corner-bet marker instead of to the number
     // itself; dead-center underneath reads unambiguously as "this number's result."
     void CreatePotentialLabel(int number, Vector2 cellPos, float cellW, float cellH)
     {
@@ -362,9 +403,10 @@ public class BettingUIController : MonoBehaviour
                 var numbers = new[] { NumberAt(col, row), NumberAt(col + 1, row), NumberAt(col, row + 1), NumberAt(col + 1, row + 1) };
                 float x = (ColX(col) + ColX(col + 1)) / 2f;
                 float y = (RowY(row) + RowY(row + 1)) / 2f;
-                UIFactory.MakeButton(canvas, $"Corner_{numbers[0]}", new Vector2(x, y), new Vector2(24, 24),
-                    "C", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Corner, numbers), 11, flatFill: true);
-                RegisterSpot(BetType.Corner, numbers, new Vector2(x, y), chipSize: 20f);
+                var spotBtn = UIFactory.MakeButton(canvas, $"Corner_{numbers[0]}", new Vector2(x, y), new Vector2(20, 20),
+                    "", InsideSpotColor, () => PlaceMulti(BetType.Corner, numbers), 11, flatFill: true);
+                spotBtn.image.sprite = UIFactory.Circle();
+                RegisterSpot(spotBtn, BetType.Corner, numbers, new Vector2(x, y), chipSize: 20f);
             }
         }
     }
@@ -376,7 +418,7 @@ public class BettingUIController : MonoBehaviour
     // between numbers in the same row (adjacent columns).
     void BuildSplitBets(Transform canvas)
     {
-        Color splitColor = new Color(0.32f, 0.32f, 0.36f, 0.9f);
+        Color splitColor = InsideSpotColor;
 
         for (int col = 0; col < Cols; col++)
         {
@@ -384,9 +426,9 @@ public class BettingUIController : MonoBehaviour
             {
                 var numbers = new[] { NumberAt(col, row), NumberAt(col, row + 1) };
                 var pos = new Vector2(ColX(col), (RowY(row) + RowY(row + 1)) / 2f);
-                UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(CellW - 14, 14),
+                var spotBtn = UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(CellW - 14, 14),
                     "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9, flatFill: true);
-                RegisterSpot(BetType.Split, numbers, pos, chipSize: 18f);
+                RegisterSpot(spotBtn, BetType.Split, numbers, pos, chipSize: 18f);
             }
         }
 
@@ -396,9 +438,9 @@ public class BettingUIController : MonoBehaviour
             {
                 var numbers = new[] { NumberAt(col, row), NumberAt(col + 1, row) };
                 var pos = new Vector2((ColX(col) + ColX(col + 1)) / 2f, RowY(row));
-                UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(14, CellH - 14),
+                var spotBtn = UIFactory.MakeButton(canvas, $"Split_{numbers[0]}_{numbers[1]}", pos, new Vector2(14, CellH - 14),
                     "", splitColor, () => PlaceMulti(BetType.Split, numbers), 9, flatFill: true);
-                RegisterSpot(BetType.Split, numbers, pos, chipSize: 18f);
+                RegisterSpot(spotBtn, BetType.Split, numbers, pos, chipSize: 18f);
             }
         }
     }
@@ -414,9 +456,9 @@ public class BettingUIController : MonoBehaviour
         {
             var numbers = new[] { NumberAt(col, 0), NumberAt(col, 1), NumberAt(col, 2) };
             var pos = new Vector2(ColX(col), streetY);
-            UIFactory.MakeButton(canvas, $"Street_{numbers[0]}", pos, new Vector2(CellW - 10, 28),
-                "S", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.Street, numbers), 14, flatFill: true);
-            RegisterSpot(BetType.Street, numbers, pos, chipSize: 24f);
+            var spotBtn = UIFactory.MakeButton(canvas, $"Street_{numbers[0]}", pos, new Vector2(CellW - 10, 18),
+                "", InsideSpotColor, () => PlaceMulti(BetType.Street, numbers), 14, flatFill: true);
+            RegisterSpot(spotBtn, BetType.Street, numbers, pos, chipSize: 24f);
         }
 
         // Six-line = two adjacent columns combined; sits at their shared boundary,
@@ -431,9 +473,10 @@ public class BettingUIController : MonoBehaviour
             };
             float x = (ColX(col) + ColX(col + 1)) / 2f;
             var pos = new Vector2(x, sixLineY);
-            UIFactory.MakeButton(canvas, $"SixLine_{numbers[0]}", pos, new Vector2(26, 26),
-                "6L", new Color(0.32f, 0.32f, 0.36f), () => PlaceMulti(BetType.SixLine, numbers), 11, flatFill: true);
-            RegisterSpot(BetType.SixLine, numbers, pos, chipSize: 20f);
+            var spotBtn = UIFactory.MakeButton(canvas, $"SixLine_{numbers[0]}", pos, new Vector2(20, 20),
+                "", InsideSpotColor, () => PlaceMulti(BetType.SixLine, numbers), 11, flatFill: true);
+            spotBtn.image.sprite = UIFactory.Circle();
+            RegisterSpot(spotBtn, BetType.SixLine, numbers, pos, chipSize: 20f);
         }
     }
 
@@ -448,9 +491,9 @@ public class BettingUIController : MonoBehaviour
         foreach (var (row, type) in rows)
         {
             var pos = new Vector2(x, RowY(row));
-            UIFactory.MakeButton(canvas, $"Bet_{type}", pos, new Vector2(ColBetW, CellH),
-                "2:1", new Color(0.24f, 0.26f, 0.29f), () => PlaceOutside(type), 15);
-            RegisterSpot(type, null, pos, chipSize: 26f);
+            var spotBtn = UIFactory.MakeButton(canvas, $"Bet_{type}", pos, new Vector2(ColBetW, CellH),
+                "2:1", OutsideFelt, () => PlaceOutside(type), 15);
+            RegisterSpot(spotBtn, type, null, pos, chipSize: 26f);
         }
     }
 
@@ -494,9 +537,9 @@ public class BettingUIController : MonoBehaviour
 
     void AddOutsideBtnSized(Transform canvas, string label, BetType type, Vector2 pos, float w, float h, Color? color = null)
     {
-        UIFactory.MakeButton(canvas, $"Bet_{type}", pos, new Vector2(w, h), label,
-            color ?? new Color(0.24f, 0.26f, 0.29f), () => PlaceOutside(type), 17, pixelFont: true);
-        RegisterSpot(type, null, pos);
+        var spotBtn = UIFactory.MakeButton(canvas, $"Bet_{type}", pos, new Vector2(w, h), label,
+            color ?? OutsideFelt, () => PlaceOutside(type), 17, pixelFont: true);
+        RegisterSpot(spotBtn, type, null, pos);
     }
 
     void PlaceStraight(int number) => PlaceMulti(BetType.Straight, new[] { number });
@@ -511,8 +554,7 @@ public class BettingUIController : MonoBehaviour
     {
         if (belt.IsPlaying) return;
         long chip = chipSelector.SelectedChip;
-        long alreadyStaked = pendingBets.Values.Sum(b => b.Amount);
-        if (!bankroll.CanAfford(alreadyStaked + chip))
+        if (!bankroll.CanAfford(chip))
         {
             statusText.text = bankroll.Balance < ChipDenominations.Values[0]
                 ? "Out of chips — use ADD FUNDS above to keep playing"
@@ -526,6 +568,9 @@ public class BettingUIController : MonoBehaviour
         string key = candidate.TargetKey();
         long newAmount = pendingBets.TryGetValue(key, out var existing) ? existing.Amount + chip : chip;
         pendingBets[key] = new Bet(type, newAmount, numbers);
+        // Chips leave the wallet the moment they're placed, same as every other table
+        bankroll.TryWithdraw(chip);
+        onBankrollChanged?.Invoke();
 
         UpdateChipVisual(key, newAmount);
         RefreshBetTray();
@@ -533,17 +578,46 @@ public class BettingUIController : MonoBehaviour
         soundManager?.PlayChip();
     }
 
+    long OnFeltTotal() => pendingBets.Values.Sum(b => b.Amount);
+
+    // Moves the felt to exactly these bets; the difference goes back to (or comes out of) the wallet.
+    // Every undo / clear / repeat / double / take-down goes through here so money always matches the felt.
+    bool SetPendingBets(IEnumerable<Bet> target)
+    {
+        var list = target.ToList();
+        long current = OnFeltTotal();
+        long wanted = list.Sum(b => b.Amount);
+        if (wanted - current > bankroll.Balance) return false;
+        bankroll.Deposit(current);
+        pendingBets.Clear();
+        foreach (var b in list) pendingBets[b.TargetKey()] = new Bet(b.Type, b.Amount, b.Numbers);
+        bankroll.TryWithdraw(wanted);
+        onBankrollChanged?.Invoke();
+        RebuildAllChipVisuals();
+        RefreshBetTray();
+        RecalculatePotentials();
+        return true;
+    }
+
     void ClearBets()
     {
         if (belt.IsPlaying) return;
         if (pendingBets.Count == 0) { statusText.text = "Nothing to clear"; FlashBlocked(); return; }
         PushUndoSnapshot();
-        pendingBets.Clear();
-        ClearChipVisuals();
-        RefreshBetTray();
-        RecalculatePotentials();
+        SetPendingBets(new List<Bet>());
         ClearWheelHighlights();
         soundManager?.PlayClick();
+    }
+
+    // Right-click on a spot: that bet comes off the felt and back to the wallet
+    void TakeDown(string key)
+    {
+        if (belt.IsPlaying || !pendingBets.TryGetValue(key, out var bet)) return;
+        PushUndoSnapshot();
+        SetPendingBets(pendingBets.Values.Where(b => b.TargetKey() != key));
+        soundManager?.PlayClick();
+        statusText.color = UIFactory.Accent;
+        statusText.text = $"Bet down — {UIFactory.FormatMoney(bet.Amount)} back to wallet";
     }
 
     // Re-places whatever was actually spun last time, at the same amounts.
@@ -557,7 +631,7 @@ public class BettingUIController : MonoBehaviour
             return;
         }
         long total = lastBets.Sum(b => b.Amount);
-        if (!bankroll.CanAfford(total))
+        if (total - OnFeltTotal() > bankroll.Balance)
         {
             statusText.text = "Not enough balance to repeat that bet";
             FlashBlocked();
@@ -565,16 +639,7 @@ public class BettingUIController : MonoBehaviour
         }
 
         PushUndoSnapshot();
-        pendingBets.Clear();
-        ClearChipVisuals();
-        foreach (var b in lastBets)
-        {
-            string key = b.TargetKey();
-            pendingBets[key] = new Bet(b.Type, b.Amount, b.Numbers);
-            UpdateChipVisual(key, b.Amount);
-        }
-        RefreshBetTray();
-        RecalculatePotentials();
+        SetPendingBets(lastBets);
         soundManager?.PlayChip();
         JuiceTweens.Pulse(this, repeatButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
     }
@@ -591,8 +656,7 @@ public class BettingUIController : MonoBehaviour
             FlashBlocked();
             return;
         }
-        long currentTotal = pendingBets.Values.Sum(b => b.Amount);
-        if (!bankroll.CanAfford(currentTotal * 2))
+        if (!bankroll.CanAfford(OnFeltTotal()))
         {
             statusText.text = "Not enough balance to double";
             FlashBlocked();
@@ -600,14 +664,7 @@ public class BettingUIController : MonoBehaviour
         }
 
         PushUndoSnapshot();
-        foreach (var key in pendingBets.Keys.ToList())
-        {
-            var b = pendingBets[key];
-            pendingBets[key] = new Bet(b.Type, b.Amount * 2, b.Numbers);
-        }
-        RebuildAllChipVisuals();
-        RefreshBetTray();
-        RecalculatePotentials();
+        SetPendingBets(pendingBets.Values.Select(b => new Bet(b.Type, b.Amount * 2, b.Numbers)));
         soundManager?.PlayChip();
         JuiceTweens.Pulse(this, doubleAllButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
     }
@@ -632,11 +689,13 @@ public class BettingUIController : MonoBehaviour
         }
         var snapshot = undoStack[undoStack.Count - 1];
         undoStack.RemoveAt(undoStack.Count - 1);
-        pendingBets.Clear();
-        foreach (var kv in snapshot) pendingBets[kv.Key] = kv.Value;
-        RebuildAllChipVisuals();
-        RefreshBetTray();
-        RecalculatePotentials();
+        if (!SetPendingBets(snapshot.Values))
+        {
+            undoStack.Add(snapshot);
+            statusText.text = "Not enough balance to undo that";
+            FlashBlocked();
+            return;
+        }
         soundManager?.PlayClick();
     }
 
@@ -649,14 +708,18 @@ public class BettingUIController : MonoBehaviour
     void ClearWheelHighlights()
     {
         belt.SetHighlightedNumbers(null);
-        tableBuilder?.SetHighlightedNumbers(null);
+        wheel?.SetHighlightedNumbers(null);
     }
 
-    // Used by the HUD's RESET button — same effect as CLEAR BETS, exposed publicly
-    // since that button lives outside this controller.
+    // Used by the HUD's RESET button, exposed publicly since that button lives outside
+    // this controller. The bankroll is reset right before this, so chips on the felt just vanish.
     public void ResetBets()
     {
-        ClearBets();
+        pendingBets.Clear();
+        ClearChipVisuals();
+        RefreshBetTray();
+        RecalculatePotentials();
+        ClearWheelHighlights();
         lastBets.Clear();
         undoStack.Clear();
         winStreak = 0;
@@ -677,7 +740,9 @@ public class BettingUIController : MonoBehaviour
 
         if (chipVisuals.TryGetValue(key, out var existingGO))
         {
-            existingGO.GetComponentInChildren<Text>().text = FormatChipAmount(amount);
+            var existingText = existingGO.GetComponentInChildren<Text>();
+            existingText.text = FormatChipAmount(amount);
+            PaintChip(existingGO.GetComponent<Image>(), existingText, amount);
             JuiceTweens.Pulse(this, existingGO.GetComponent<RectTransform>(), peakScale: 1.25f, duration: 0.18f);
             return;
         }
@@ -688,7 +753,9 @@ public class BettingUIController : MonoBehaviour
         go.transform.SetParent(tableRoot, false);
         var img = go.AddComponent<Image>();
         img.sprite = UIFactory.Circle();
-        img.color = UIFactory.Accent;
+        var edge = go.AddComponent<Outline>();
+        edge.effectColor = new Color(0f, 0f, 0f, 0.8f);
+        edge.effectDistance = new Vector2(1f, -1f);
         // Purely a visual overlay — without this it sits on top of the button it
         // marks and swallows every click after the first, silently capping the bet
         // at one chip no matter how many more times you click the spot.
@@ -709,9 +776,21 @@ public class BettingUIController : MonoBehaviour
         text.resizeTextMaxSize = fontSize;
         text.text = FormatChipAmount(amount);
         text.raycastTarget = false;
+        PaintChip(img, text, amount);
 
         chipVisuals[key] = go;
         JuiceTweens.PopIn(this, rt);
+    }
+
+    // Chip colored like the biggest chip in the stack (red 25 / blue 100 / white 500), as on the other tables
+    static void PaintChip(Image img, Text text, long amount)
+    {
+        var denoms = ChipDenominations.Values;
+        int d = 0;
+        for (int i = denoms.Length - 1; i >= 0; i--)
+            if (amount >= denoms[i]) { d = i; break; }
+        img.color = ChipColors[d];
+        text.color = d == denoms.Length - 1 ? Color.black : Color.white;
     }
 
     static string FormatChipAmount(long amount) => amount >= 1000 ? $"{amount / 1000f:0.#}k" : amount.ToString();
@@ -760,15 +839,10 @@ public class BettingUIController : MonoBehaviour
     {
         if (belt.IsPlaying) return;
 
-        long totalStake = pendingBets.Values.Sum(b => b.Amount);
-        if (totalStake > 0 && !bankroll.TryWithdraw(totalStake))
-        {
-            statusText.text = "Not enough balance to spin";
-            FlashBlocked();
-            return;
-        }
-
+        // Chips already left the wallet when they were placed
+        long totalStake = OnFeltTotal();
         var bets = pendingBets.Values.ToList();
+        undoStack.Clear();
         spinButton.interactable = false;
         soundManager?.PlayClick();
 
@@ -788,15 +862,20 @@ public class BettingUIController : MonoBehaviour
         for (int n = 0; n <= 36; n++)
             if (bets.Any(b => BetResolver.Resolve(b, n) > 0)) highlighted.Add(n);
         belt.SetHighlightedNumbers(highlighted);
-        tableBuilder?.SetHighlightedNumbers(highlighted);
+        wheel?.SetHighlightedNumbers(highlighted);
 
         int winningNumber = generator.Spin();
+        spinInFlight = true;
+        spinBets = bets;
+        spinWinningNumber = winningNumber;
         belt.PlaySpin(winningNumber, () => OnSpinComplete(winningNumber, bets, totalStake));
-        wheelAnimator.PlaySpin(winningNumber);
+        wheel.PlaySpin(winningNumber);
     }
 
     void OnSpinComplete(int winningNumber, List<Bet> bets, long totalStake)
     {
+        if (!spinInFlight) return; // already settled by RefundTableBets
+        spinInFlight = false;
         SetTableVisible(true);
         chipSelector.SetVisible(true);
         pastSpinsStrip.SetVisible(true);
@@ -935,6 +1014,30 @@ public class BettingUIController : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         achievementBadgeGO.SetActive(false);
+    }
+
+    // ---- Leaving the table ----
+
+    public long OnTableTotal() => spinInFlight ? 0 : OnFeltTotal();
+
+    // Leaving the table: chips not yet spun go back to the wallet; a spin mid-reveal is
+    // already decided, so it's paid out and returned as a record for the history. Pure
+    // bankroll math — safe from OnDestroy / OnApplicationQuit and safe to call twice.
+    public SpinRecord RefundTableBets()
+    {
+        if (spinInFlight)
+        {
+            spinInFlight = false;
+            long staked = spinBets.Sum(b => b.Amount);
+            long returned = spinBets.Sum(b => BetResolver.Resolve(b, spinWinningNumber));
+            bankroll.Deposit(returned);
+            pendingBets.Clear();
+            return new SpinRecord(spinIndex++, spinWinningNumber, staked, returned, bankroll.Balance);
+        }
+        long onFelt = OnFeltTotal();
+        if (onFelt > 0) bankroll.Deposit(onFelt);
+        pendingBets.Clear();
+        return null;
     }
 
     void SetTableVisible(bool visible)
