@@ -22,6 +22,7 @@ public class BaccaratBettingUIController : MonoBehaviour
     FloatingTextUI floatingText;
     FloatingTextUI milestoneToast;
     Action<BaccaratRoundRecord> onRoundResolved;
+    Action onBankrollChanged;
 
     BaccaratRound currentRound;
     bool roundActive;
@@ -36,7 +37,9 @@ public class BaccaratBettingUIController : MonoBehaviour
     TextAnimator_TMP streakAnimator;
     GameObject streakBadgeGO;
 
+    // Chips on the felt for the next hand (already out of the wallet), and the ones riding on the hand being dealt
     readonly Dictionary<BaccaratBetType, long> pendingBets = new Dictionary<BaccaratBetType, long>();
+    readonly Dictionary<BaccaratBetType, long> roundBets = new Dictionary<BaccaratBetType, long>();
     readonly Dictionary<BaccaratBetType, long> lastBets = new Dictionary<BaccaratBetType, long>();
     readonly List<Dictionary<BaccaratBetType, long>> undoStack = new List<Dictionary<BaccaratBetType, long>>();
     const int MaxUndoDepth = 30;
@@ -46,8 +49,10 @@ public class BaccaratBettingUIController : MonoBehaviour
     BaccaratHandUI bankerHandUI;
 
     Text statusText;
+    Text hintText;
     Button dealButton, clearBetButton, repeatButton, undoButton;
     Color dealBaseColor, clearBaseColor, repeatBaseColor;
+    Coroutine clearResultRoutine;
 
     class BetSpot
     {
@@ -55,11 +60,12 @@ public class BaccaratBettingUIController : MonoBehaviour
         public GameObject Root;
         public Image FillImg;
         public Text AmountText;
-        public Text PayoutText;
+        public Text ResultText;
         public readonly List<GameObject> ChipVisuals = new List<GameObject>();
     }
 
     readonly Dictionary<BaccaratBetType, BetSpot> spots = new Dictionary<BaccaratBetType, BetSpot>();
+    // Same red/blue/white-by-denomination mapping ChipSelectorUI uses for its own chip buttons
     static readonly Color[] ChipStackColors =
     {
         new Color(0.65f, 0.12f, 0.12f),
@@ -67,13 +73,26 @@ public class BaccaratBettingUIController : MonoBehaviour
         UIFactory.Chip500White,
     };
 
-    const float PanelCenterX = 0f;
+    // Layout (canvas coordinates) — same felt footprint as the other card tables
+    static readonly Vector2 FeltCenter = new Vector2(-140f, -175f);
+    static readonly Vector2 FeltSize = new Vector2(1580f, 700f);
+    static readonly Vector2 CardSize = new Vector2(88f, 124f);
+    const float CardSpacing = 98f; // wider than the cards so they never overlap
+    const float HandOffsetX = 330f, HandY = 60f, SpotY = -300f;
+    static readonly Color RailColor = new Color(0.30f, 0.22f, 0.10f);
+    static readonly Color FeltText = new Color(0.82f, 0.86f, 0.80f);
+    static readonly Color TitleGold = new Color(1f, 0.85f, 0.1f);
+    // Player blue, Banker red — the colors every baccarat layout uses
+    static readonly Color PlayerBlue = new Color(0.35f, 0.60f, 1f);
+    static readonly Color BankerRed = new Color(1f, 0.38f, 0.35f);
+    static readonly Color TieGreen = new Color(0.45f, 0.85f, 0.45f);
+
     static readonly string[] WinFlavors = { "Nice bet!", "There it is!", "Press DEAL again", "Keep it going!", "Well played" };
     static readonly string[] LoseFlavors = { "Press DEAL again", "Try again", "Onward", "Next hand's yours", "Deal again" };
 
     public void Build(Transform canvas, Bankroll bankroll, ChipSelectorUI chipSelector, Shoe shoe,
         SoundManager soundManager, JuiceManager juiceManager, FloatingTextUI floatingText, FloatingTextUI milestoneToast,
-        Action<BaccaratRoundRecord> onRoundResolved)
+        Action<BaccaratRoundRecord> onRoundResolved, Action onBankrollChanged)
     {
         this.bankroll = bankroll;
         this.chipSelector = chipSelector;
@@ -83,8 +102,9 @@ public class BaccaratBettingUIController : MonoBehaviour
         this.floatingText = floatingText;
         this.milestoneToast = milestoneToast;
         this.onRoundResolved = onRoundResolved;
+        this.onBankrollChanged = onBankrollChanged;
 
-        foreach (BaccaratBetType t in Enum.GetValues(typeof(BaccaratBetType))) pendingBets[t] = 0;
+        foreach (BaccaratBetType t in Enum.GetValues(typeof(BaccaratBetType))) { pendingBets[t] = 0; roundBets[t] = 0; lastBets[t] = 0; }
 
         var tableRootGO = new GameObject("BaccaratUIRoot");
         tableRootGO.transform.SetParent(canvas, false);
@@ -95,34 +115,86 @@ public class BaccaratBettingUIController : MonoBehaviour
         tableRootRT.anchoredPosition = Vector2.zero;
         tableRoot = tableRootGO.transform;
 
-        UIFactory.MakePanel(tableRoot, "BaccaratPanelBg", new Vector2(PanelCenterX, -100), new Vector2(1000, 660), UIFactory.PanelDark);
-        UIFactory.MakeHeroTitle(tableRoot, "Header_Baccarat", new Vector2(PanelCenterX, 195), "BACCARAT TABLE", 26);
-
-        UIFactory.MakeText(tableRoot, "PlayerLabel", new Vector2(-170, 150), 13,
-            TextAnchor.MiddleCenter, new Vector2(200, 20), UIFactory.TextDim, FontStyle.Bold).text = "PLAYER";
-        UIFactory.MakeText(tableRoot, "BankerLabel", new Vector2(170, 150), 13,
-            TextAnchor.MiddleCenter, new Vector2(200, 20), UIFactory.TextDim, FontStyle.Bold).text = "BANKER";
-
-        playerHandUI = new BaccaratHandUI();
-        playerHandUI.Build(tableRoot, new Vector2(-170, 90));
-        bankerHandUI = new BaccaratHandUI();
-        bankerHandUI.Build(tableRoot, new Vector2(170, 90));
-
-        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(PanelCenterX, -20), new Vector2(720, 40), UIFactory.PanelDark, shadow: false);
+        // Top band under the HUD: status bar, betting buttons, right-click tip (same spots as the other games)
+        var statusPanelBg = UIFactory.MakePanel(tableRoot, "StatusPanelBg", new Vector2(0, 350), new Vector2(600, 40), UIFactory.PanelDark, shadow: false);
         UIFactory.AddSharpFrame(statusPanelBg, UIFactory.AccentDim, square: true);
-        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(PanelCenterX, -20), 19,
-            sizeDelta: new Vector2(700, 34), color: UIFactory.Accent, style: FontStyle.Bold);
+        statusText = UIFactory.MakeText(tableRoot, "StatusText", new Vector2(0, 350), 19,
+            sizeDelta: new Vector2(590, 36), color: UIFactory.Accent, style: FontStyle.Bold);
         statusText.text = "Place bets, then DEAL";
 
-        BuildBetSpot(BaccaratBetType.Player, new Vector2(-260, -140), UIFactory.Positive,    new Vector2(280, 110));
-        BuildBetSpot(BaccaratBetType.Tie,    new Vector2(   0, -140), new Color(0.55f, 0.45f, 0.15f), new Vector2(200, 110));
-        BuildBetSpot(BaccaratBetType.Banker, new Vector2( 260, -140), UIFactory.Negative,   new Vector2(280, 110));
+        BuildRulesCard();
+
+        // Felt with a wooden rail: Player and Banker hands on top, the three betting boxes below
+        var rail = UIFactory.MakePanel(tableRoot, "FeltRail", FeltCenter, FeltSize + new Vector2(24f, 24f), RailColor);
+        UIFactory.AddSharpFrame(rail, new Color(0.62f, 0.52f, 0.25f), square: true);
+        UIFactory.MakePanel(tableRoot, "Felt", FeltCenter, FeltSize, UIFactory.FeltGreen, shadow: false);
+        float top = FeltCenter.y + FeltSize.y / 2f;
+        UIFactory.MakeText(tableRoot, "PlayerLabel", new Vector2(FeltCenter.x - HandOffsetX, top - 24f), 20,
+            TextAnchor.MiddleCenter, new Vector2(300, 28), PlayerBlue, FontStyle.Bold).text = "PLAYER";
+        UIFactory.MakeText(tableRoot, "BankerLabel", new Vector2(FeltCenter.x + HandOffsetX, top - 24f), 20,
+            TextAnchor.MiddleCenter, new Vector2(300, 28), BankerRed, FontStyle.Bold).text = "BANKER";
+        UIFactory.MakeText(tableRoot, "FeltTitle", new Vector2(FeltCenter.x, HandY + 10f), 30,
+            TextAnchor.MiddleCenter, new Vector2(300, 40), TitleGold, FontStyle.Bold).text = "BACCARAT";
+        UIFactory.MakeText(tableRoot, "FeltSub", new Vector2(FeltCenter.x, HandY - 24f), 15,
+            TextAnchor.MiddleCenter, new Vector2(300, 24), FeltText).text = "8-DECK SHOE";
+        UIFactory.MakeText(tableRoot, "FeltRules", new Vector2(FeltCenter.x, -120f), 16,
+            TextAnchor.MiddleCenter, new Vector2(1000, 24), FeltText).text =
+            "BANKER WINS PAY 1 TO 1 LESS 5% COMMISSION   ·   TIE PAYS 8 TO 1";
+
+        playerHandUI = new BaccaratHandUI();
+        playerHandUI.Build(tableRoot, new Vector2(FeltCenter.x - HandOffsetX, HandY), CardSize, CardSpacing);
+        bankerHandUI = new BaccaratHandUI();
+        bankerHandUI.Build(tableRoot, new Vector2(FeltCenter.x + HandOffsetX, HandY), CardSize, CardSpacing);
+
+        BuildBetSpot(BaccaratBetType.Player, new Vector2(FeltCenter.x - 430f, SpotY), new Vector2(400, 170), PlayerBlue, "PAYS 1 TO 1");
+        BuildBetSpot(BaccaratBetType.Tie,    new Vector2(FeltCenter.x,        SpotY), new Vector2(300, 170), TieGreen, "PAYS 8 TO 1");
+        BuildBetSpot(BaccaratBetType.Banker, new Vector2(FeltCenter.x + 430f, SpotY), new Vector2(400, 170), BankerRed, "PAYS 1 TO 1 LESS 5%");
+
+        hintText = UIFactory.MakeText(tableRoot, "HintText", new Vector2(FeltCenter.x, SpotY - 150f), 15,
+            sizeDelta: new Vector2(600, 24), color: FeltText);
 
         BuildActionButtons();
+        BuildTakeDownTip();
         BuildStreakBadge();
 
         RefreshActionButtons();
         RefreshBetDisplay();
+    }
+
+    // Rules at a glance, in the free space between the chips and the HUD (same card as the other tables)
+    void BuildRulesCard()
+    {
+        var center = new Vector2(-495f, 340f);
+        var bg = UIFactory.MakePanel(tableRoot, "RulesCardBg", center, new Vector2(330f, 290f), UIFactory.PanelDark, shadow: false);
+        UIFactory.AddSharpFrame(bg, UIFactory.AccentDim, square: true);
+        (string text, bool header)[] lines =
+        {
+            ("PAYOUTS", true),
+            ("Player pays 1 to 1", false),
+            ("Banker pays 1 to 1 less 5% commission", false),
+            ("Tie pays 8 to 1  ·  Player/Banker push", false),
+            ("THIRD CARD", true),
+            ("Natural 8 or 9: nobody draws", false),
+            ("Player draws on 0-5, stands on 6-7", false),
+            ("Banker draws by the house table", false),
+            ("No decisions after DEAL", false),
+        };
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var (text, header) = lines[i];
+            UIFactory.MakeText(tableRoot, $"RuleLine{i}", center + new Vector2(0f, 120f - i * 30f), header ? 16 : 15,
+                TextAnchor.MiddleCenter, new Vector2(310f, 28f),
+                header ? TitleGold : FeltText, header ? FontStyle.Bold : FontStyle.Normal).text = text;
+        }
+    }
+
+    // One framed line under the betting buttons
+    void BuildTakeDownTip()
+    {
+        var tip = UIFactory.MakePanel(tableRoot, "TakeDownTipBg", new Vector2(0f, 238f), new Vector2(360f, 26f), UIFactory.PanelDarker, shadow: false);
+        UIFactory.AddSharpFrame(tip, UIFactory.AccentDim, square: true);
+        UIFactory.MakeText(tableRoot, "TakeDownTip", new Vector2(0f, 238f), 14, TextAnchor.MiddleCenter,
+            new Vector2(350f, 24f), UIFactory.TextLight).text = "RIGHT-CLICK a bet to take it down";
     }
 
     // Same construction pattern as blackjack's streak badge: framed black panel +
@@ -133,14 +205,14 @@ public class BaccaratBettingUIController : MonoBehaviour
         streakBadgeGO = new GameObject("StreakBadge");
         streakBadgeGO.transform.SetParent(tableRoot, false);
         var rt = streakBadgeGO.AddComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(300, 90);
-        rt.anchoredPosition = new Vector2(-480, 465);
-        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(300, 90), Color.black);
+        rt.sizeDelta = new Vector2(260, 36);
+        rt.anchoredPosition = new Vector2(0, 395);
+        UIFactory.MakeFramedPanel(streakBadgeGO.transform, "StreakBadgeBg", Vector2.zero, new Vector2(260, 36), Color.black);
 
         var textGO = new GameObject("StreakText");
         textGO.transform.SetParent(streakBadgeGO.transform, false);
         var textRt = textGO.AddComponent<RectTransform>();
-        textRt.sizeDelta = new Vector2(280, 70);
+        textRt.sizeDelta = new Vector2(250, 32);
         textRt.anchoredPosition = Vector2.zero;
         streakText = textGO.AddComponent<TextMeshProUGUI>();
         streakText.alignment = TextAlignmentOptions.Center;
@@ -158,7 +230,7 @@ public class BaccaratBettingUIController : MonoBehaviour
         streakBadgeGO.SetActive(false);
     }
 
-    void BuildBetSpot(BaccaratBetType type, Vector2 pos, Color accentColor, Vector2 size)
+    void BuildBetSpot(BaccaratBetType type, Vector2 pos, Vector2 size, Color accent, string payout)
     {
         var go = new GameObject($"BetSpot_{type}");
         go.transform.SetParent(tableRoot, false);
@@ -168,51 +240,54 @@ public class BaccaratBettingUIController : MonoBehaviour
         var fill = go.AddComponent<Image>();
         fill.sprite = UIFactory.RoundedRect();
         fill.type = Image.Type.Sliced;
-        fill.color = new Color(1f, 1f, 1f, 0.06f);
-        UIFactory.AddSharpFrame(go, accentColor, square: true);
+        fill.color = new Color(0f, 0f, 0f, 0.22f);
+        UIFactory.AddSharpFrame(go, accent, square: true);
         var btn = go.AddComponent<Button>();
         btn.targetGraphic = fill;
         btn.onClick.AddListener(() => OnSpotClicked(type));
+        RightClickRelay.Attach(go, () => TakeDown(type));
 
-        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, 22), 16,
-            sizeDelta: new Vector2(size.x - 20, 50), color: UIFactory.TextDim, style: FontStyle.Bold);
-        amountText.text = type.ToString().ToUpperInvariant();
-        amountText.alignment = TextAnchor.MiddleCenter;
+        UIFactory.MakeText(go.transform, "NameText", new Vector2(0, 58), 24,
+            TextAnchor.MiddleCenter, new Vector2(size.x - 20, 32), accent, FontStyle.Bold).text = type.ToString().ToUpperInvariant();
+        UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, 32), 14,
+            TextAnchor.MiddleCenter, new Vector2(size.x - 20, 22), FeltText).text = payout;
+
+        var amountText = UIFactory.MakeText(go.transform, "AmountText", new Vector2(0, -66), 18,
+            TextAnchor.MiddleCenter, new Vector2(size.x - 20, 26), UIFactory.TextLight, FontStyle.Bold);
         var amountShadow = amountText.gameObject.AddComponent<Shadow>();
         amountShadow.effectColor = new Color(0, 0, 0, 0.85f);
         amountShadow.effectDistance = new Vector2(1, -1);
 
-        string payoutLabel = type == BaccaratBetType.Tie ? "PAYS 8:1"
-            : type == BaccaratBetType.Banker ? "PAYS 0.95:1" : "PAYS 1:1";
-        var payoutText = UIFactory.MakeText(go.transform, "PayoutText", new Vector2(0, -28), 14,
-            sizeDelta: new Vector2(size.x - 20, 22), color: UIFactory.TextDim, style: FontStyle.Normal);
-        payoutText.text = payoutLabel;
-        payoutText.alignment = TextAnchor.MiddleCenter;
-        var payoutShadow = payoutText.gameObject.AddComponent<Shadow>();
-        payoutShadow.effectColor = new Color(0, 0, 0, 0.85f);
-        payoutShadow.effectDistance = new Vector2(1, -1);
+        var resultText = UIFactory.MakeText(tableRoot, $"Result_{type}", pos + new Vector2(0, -size.y / 2f - 20f), 18,
+            TextAnchor.MiddleCenter, new Vector2(size.x, 26), UIFactory.TextLight, FontStyle.Bold);
+        resultText.supportRichText = true;
+        resultText.text = "";
 
-        spots[type] = new BetSpot { Type = type, Root = go, FillImg = fill, AmountText = amountText, PayoutText = payoutText };
+        spots[type] = new BetSpot { Type = type, Root = go, FillImg = fill, AmountText = amountText, ResultText = resultText };
     }
+
+    // Betting row sits in the top band, same spots as every other table
+    const float BettingButtonY = 295f;
 
     void BuildActionButtons()
     {
-        const float y = -390f;
         clearBaseColor = UIFactory.RedBet;
         dealBaseColor = UIFactory.Positive;
         repeatBaseColor = UIFactory.AccentDim;
 
-        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-183f, y), new Vector2(161, 53),
-            "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
-        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(0f, y), new Vector2(184, 62),
-            "DEAL", dealBaseColor, OnDealClicked, 20, pixelFont: true);
-        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(183f, y), new Vector2(161, 53),
-            "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
-        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(-363f, y), new Vector2(138, 53),
+        undoButton = UIFactory.MakeButton(tableRoot, "UndoBtn", new Vector2(-230f, BettingButtonY), new Vector2(110, 46),
             "UNDO", UIFactory.AccentDim, UndoLastBetAction, 13, pixelFont: true);
+        clearBetButton = UIFactory.MakeButton(tableRoot, "ClearBetBtn", new Vector2(-105f, BettingButtonY), new Vector2(130, 46),
+            "CLEAR BET", clearBaseColor, OnClearBetClicked, 13, pixelFont: true);
+        dealButton = UIFactory.MakeButton(tableRoot, "DealBtn", new Vector2(45f, BettingButtonY), new Vector2(150, 50),
+            "DEAL", dealBaseColor, OnDealClicked, 20, pixelFont: true);
+        repeatButton = UIFactory.MakeButton(tableRoot, "RepeatBetBtn", new Vector2(195f, BettingButtonY), new Vector2(130, 46),
+            "REPEAT BET", repeatBaseColor, OnRepeatBetClicked, 12, pixelFont: true);
     }
 
     // ---- Betting (pre-round) ----
+    // Chips leave the wallet the moment they're placed (same as every other table), so the
+    // balance always shows what's still in your pocket; undo / clear / take-down put it back.
 
     // A blocked action used to only change the status text — easy to miss mid-
     // click. A quick shake makes it felt, not just read.
@@ -222,8 +297,7 @@ public class BaccaratBettingUIController : MonoBehaviour
     {
         if (roundActive) return;
         long chip = chipSelector.SelectedChip;
-        long totalPending = pendingBets.Values.Sum();
-        if (!bankroll.CanAfford(totalPending + chip))
+        if (!bankroll.CanAfford(chip))
         {
             statusText.text = bankroll.Balance < ChipDenominations.Values[0]
                 ? "Out of chips — use ADD FUNDS above to keep playing"
@@ -231,13 +305,33 @@ public class BaccaratBettingUIController : MonoBehaviour
             FlashBlocked();
             return;
         }
+        ClearLastResult();
         PushUndoSnapshot();
+        bankroll.TryWithdraw(chip);
         pendingBets[type] += chip;
         soundManager?.PlayChip();
-        JuiceTweens.Pulse(this, (RectTransform)spots[type].Root.transform, peakScale: 1.12f, duration: 0.18f);
-        AddBetChipVisual(spots[type], chip);
+        JuiceTweens.Pulse(this, (RectTransform)spots[type].Root.transform, peakScale: 1.06f, duration: 0.18f);
+        onBankrollChanged?.Invoke();
         RefreshBetDisplay();
         RefreshActionButtons();
+    }
+
+    // Moves the chips on the felt to exactly these amounts; the difference goes back to (or comes out of) the wallet.
+    bool SetPendingBets(Dictionary<BaccaratBetType, long> target)
+    {
+        long current = pendingBets.Values.Sum();
+        long wanted = target.Values.Sum();
+        if (wanted - current > bankroll.Balance) return false;
+        bankroll.Deposit(current);
+        foreach (var t in spots.Keys.ToList())
+        {
+            pendingBets[t] = target.TryGetValue(t, out long amount) ? amount : 0;
+        }
+        bankroll.TryWithdraw(wanted);
+        onBankrollChanged?.Invoke();
+        RefreshBetDisplay();
+        RefreshActionButtons();
+        return true;
     }
 
     void OnClearBetClicked()
@@ -245,11 +339,20 @@ public class BaccaratBettingUIController : MonoBehaviour
         if (roundActive) return;
         if (pendingBets.Values.Sum() <= 0) { statusText.text = "Nothing to clear"; FlashBlocked(); return; }
         PushUndoSnapshot();
-        foreach (var t in spots.Keys.ToList()) pendingBets[t] = 0;
+        SetPendingBets(new Dictionary<BaccaratBetType, long>());
         soundManager?.PlayClick();
-        foreach (var spot in spots.Values) ClearBetChipVisuals(spot);
-        RefreshBetDisplay();
-        RefreshActionButtons();
+    }
+
+    void TakeDown(BaccaratBetType type)
+    {
+        if (roundActive || pendingBets[type] <= 0) return;
+        long amt = pendingBets[type];
+        PushUndoSnapshot();
+        var target = new Dictionary<BaccaratBetType, long>(pendingBets) { [type] = 0 };
+        SetPendingBets(target);
+        soundManager?.PlayClick();
+        statusText.color = UIFactory.Accent;
+        statusText.text = $"{type} bet down — {UIFactory.FormatMoney(amt)} back to wallet";
     }
 
     void PushUndoSnapshot()
@@ -269,80 +372,64 @@ public class BaccaratBettingUIController : MonoBehaviour
         }
         var snapshot = undoStack[undoStack.Count - 1];
         undoStack.RemoveAt(undoStack.Count - 1);
-        foreach (var t in spots.Keys.ToList()) pendingBets[t] = snapshot.TryGetValue(t, out long amount) ? amount : 0;
-        RebuildAllChipVisuals();
-        RefreshBetDisplay();
-        RefreshActionButtons();
+        SetPendingBets(snapshot);
         soundManager?.PlayClick();
-    }
-
-    void RebuildAllChipVisuals()
-    {
-        foreach (var t in spots.Keys.ToList())
-        {
-            ClearBetChipVisuals(spots[t]);
-            if (pendingBets[t] <= 0) continue;
-            int chipCount = Mathf.Clamp((int)(pendingBets[t] / ChipDenominations.Values[0]), 1, 5);
-            for (int i = 0; i < chipCount; i++) AddBetChipVisual(spots[t], -1);
-        }
-    }
-
-    void AddBetChipVisual(BetSpot spot, long denomination)
-    {
-        const int maxVisibleChips = 8;
-        if (spot.ChipVisuals.Count >= maxVisibleChips) return;
-        int colorIndex = Array.IndexOf(ChipDenominations.Values, denomination);
-        Color fill = colorIndex >= 0 ? ChipStackColors[colorIndex % ChipStackColors.Length] : UIFactory.Accent;
-
-        var go = new GameObject($"BetChip_{spot.ChipVisuals.Count}");
-        go.transform.SetParent(spot.Root.transform, false);
-        var img = go.AddComponent<Image>();
-        img.sprite = UIFactory.Circle();
-        img.color = fill;
-        img.raycastTarget = false;
-        var rt = go.GetComponent<RectTransform>();
-        rt.sizeDelta = new Vector2(28, 28);
-        int stackIndex = spot.ChipVisuals.Count;
-        float fanX = (stackIndex % 2 == 0 ? -1f : 1f) * (8f + stackIndex * 2f) + UnityEngine.Random.Range(-3f, 3f);
-        // Payout text is hidden the moment a chip lands (see RefreshBetDisplay), so
-        // the pile only has to clear the amount text above it, not the payout label.
-        float fanY = -50f + Mathf.Min(stackIndex, 4) * 8f;
-        rt.anchoredPosition = new Vector2(fanX, fanY);
-
-        spot.ChipVisuals.Add(go);
-        spot.AmountText.transform.SetAsLastSibling();
-        JuiceTweens.PopIn(this, rt, overshoot: 1.3f, duration: 0.18f);
-    }
-
-    void ClearBetChipVisuals(BetSpot spot)
-    {
-        foreach (var go in spot.ChipVisuals) Destroy(go);
-        spot.ChipVisuals.Clear();
     }
 
     void OnRepeatBetClicked()
     {
         if (roundActive) return;
-        long lastTotal = lastBets.Values.Sum();
-        if (lastTotal <= 0)
+        if (lastBets.Values.Sum() <= 0)
         {
             statusText.text = "No previous bet to repeat";
             FlashBlocked();
             return;
         }
-        if (!bankroll.CanAfford(lastTotal))
+        if (lastBets.Values.Sum() - pendingBets.Values.Sum() > bankroll.Balance)
         {
             statusText.text = "Not enough balance to repeat that bet";
             FlashBlocked();
             return;
         }
+        ClearLastResult();
         PushUndoSnapshot();
+        SetPendingBets(lastBets);
         soundManager?.PlayChip();
         JuiceTweens.Pulse(this, repeatButton.GetComponent<RectTransform>(), peakScale: 1.15f, duration: 0.2f);
-        foreach (var t in spots.Keys.ToList()) pendingBets[t] = lastBets.TryGetValue(t, out long amount) ? amount : 0;
-        RebuildAllChipVisuals();
-        RefreshBetDisplay();
-        RefreshActionButtons();
+    }
+
+    // Chip pile in a betting box, largest denominations on top, colored like the chip selector.
+    void RebuildChips(BetSpot spot, long amount)
+    {
+        foreach (var go in spot.ChipVisuals) Destroy(go);
+        spot.ChipVisuals.Clear();
+        var colors = new List<Color>();
+        long remaining = amount;
+        var denoms = ChipDenominations.Values;
+        for (int d = denoms.Length - 1; d >= 0 && colors.Count < 5; d--)
+            while (remaining >= denoms[d] && colors.Count < 5)
+            {
+                remaining -= denoms[d];
+                colors.Add(ChipStackColors[d]);
+            }
+        colors.Reverse();
+        for (int i = 0; i < colors.Count; i++)
+        {
+            var go = new GameObject($"BetChip_{i}");
+            go.transform.SetParent(spot.Root.transform, false);
+            var img = go.AddComponent<Image>();
+            img.sprite = UIFactory.Circle();
+            img.color = colors[i];
+            img.raycastTarget = false;
+            var edge = go.AddComponent<Outline>();
+            edge.effectColor = new Color(0f, 0f, 0f, 0.8f);
+            edge.effectDistance = new Vector2(1.5f, -1.5f);
+            var rt = go.GetComponent<RectTransform>();
+            rt.sizeDelta = new Vector2(48, 48);
+            rt.anchoredPosition = new Vector2(0f, -22f + i * 4f);
+            spot.ChipVisuals.Add(go);
+        }
+        spot.AmountText.transform.SetAsLastSibling();
     }
 
     // ---- Round flow ----
@@ -351,34 +438,31 @@ public class BaccaratBettingUIController : MonoBehaviour
     {
         long total = pendingBets.Values.Sum();
         if (roundActive || total <= 0) return;
-        if (!bankroll.TryWithdraw(total))
-        {
-            statusText.text = "Not enough balance to deal";
-            FlashBlocked();
-            return;
-        }
 
         if (shoe.NeedsReshuffle)
             milestoneToast?.Show("New shoe — reshuffling", UIFactory.Accent, fontSize: 24);
 
+        ClearLastResult();
         roundActive = true;
         undoStack.Clear();
-        foreach (var t in spots.Keys.ToList()) lastBets[t] = pendingBets[t];
+        foreach (var t in spots.Keys.ToList())
+        {
+            lastBets[t] = pendingBets[t];
+            roundBets[t] = pendingBets[t];
+            pendingBets[t] = 0;
+        }
         currentRound = new BaccaratRound(shoe);
         currentRound.Deal();
-        foreach (var t in spots.Keys.ToList()) pendingBets[t] = 0;
 
         statusText.color = UIFactory.Accent;
         statusText.text = "Dealing...";
 
         // Last round's hands stay on the table until now — this is the moment a new
-        // one actually starts, so sweep them out right as the new deal begins rather
-        // than on a timer, and let friends see the finished hand for as long as they
-        // like in between.
+        // one actually starts, so sweep them out right as the new deal begins.
         playerHandUI.Clear();
         bankerHandUI.Clear();
 
-        foreach (var spot in spots.Values) ClearBetChipVisuals(spot);
+        // The chips stay in their boxes for the whole deal
         RefreshBetDisplay();
         RefreshActionButtons();
         StartCoroutine(DealRevealSequence());
@@ -414,22 +498,40 @@ public class BaccaratBettingUIController : MonoBehaviour
             }
         }
 
-        ResolveRound();
+        if (roundActive) ResolveRound();
     }
 
     // ---- Resolution + juice ----
 
+    long RoundReturn() => roundBets.Sum(kv => kv.Value > 0 ? BaccaratResolver.Payout(kv.Key, kv.Value, currentRound.Outcome) : 0);
+
     void ResolveRound()
     {
-        long totalStaked = lastBets.Values.Sum();
-        long totalReturned = lastBets.Sum(kv => BaccaratResolver.Payout(kv.Key, kv.Value, currentRound.Outcome));
+        long totalStaked = roundBets.Values.Sum();
+        long totalReturned = RoundReturn();
         bankroll.Deposit(totalReturned);
+        onBankrollChanged?.Invoke();
 
         long net = totalReturned - totalStaked;
-        bool tieBetWon = lastBets.TryGetValue(BaccaratBetType.Tie, out long tieBet) && tieBet > 0 && currentRound.Outcome == BaccaratOutcome.Tie;
+        bool tieBetWon = roundBets[BaccaratBetType.Tie] > 0 && currentRound.Outcome == BaccaratOutcome.Tie;
+
+        // Per-box result under each betting box
+        foreach (var kv in spots)
+        {
+            long stake = roundBets[kv.Key];
+            if (stake <= 0) continue;
+            long ret = BaccaratResolver.Payout(kv.Key, stake, currentRound.Outcome);
+            kv.Value.ResultText.text = ret > stake ? $"<color=#6CE26C>WIN +{UIFactory.FormatMoney(ret - stake)}</color>"
+                : ret == stake ? "PUSH" : $"<color=#FF6B6B>LOSE -{UIFactory.FormatMoney(stake)}</color>";
+        }
+        // The winning side's box lights up
+        var winningType = currentRound.Outcome == BaccaratOutcome.PlayerWin ? BaccaratBetType.Player
+            : currentRound.Outcome == BaccaratOutcome.BankerWin ? BaccaratBetType.Banker : BaccaratBetType.Tie;
+        spots[winningType].FillImg.color = new Color(1f, 0.85f, 0.1f, 0.22f);
+        JuiceTweens.Pulse(this, (RectTransform)spots[winningType].Root.transform, peakScale: 1.06f, duration: 0.3f);
 
         statusText.color = net > 0 ? UIFactory.Positive : net < 0 ? UIFactory.Negative : UIFactory.Accent;
-        string outcomeLabel = DescribeOutcome(currentRound.Outcome);
+        string outcomeLabel = DescribeOutcome(currentRound);
         string flavor = net > 0 ? WinFlavors[UnityEngine.Random.Range(0, WinFlavors.Length)]
             : net < 0 ? LoseFlavors[UnityEngine.Random.Range(0, LoseFlavors.Length)]
             : "Press DEAL again";
@@ -445,7 +547,7 @@ public class BaccaratBettingUIController : MonoBehaviour
                 juiceManager?.PlayConfetti(2f);
                 juiceManager?.PulseLight(0.9f, 0.7f);
                 juiceManager?.PlayMoneyFountain(Vector2.zero);
-                floatingText?.Show($"TIE PAYS 8:1! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
+                floatingText?.Show($"TIE PAYS 8 TO 1! +{UIFactory.FormatMoney(net)}", UIFactory.Positive, fontSize: 42);
             }
             else if (net >= ChipDenominations.Values[2]) // $500+
             {
@@ -499,6 +601,7 @@ public class BaccaratBettingUIController : MonoBehaviour
         streakBadgeGO.SetActive(showStreak);
         if (showStreak) JuiceTweens.Pulse(this, (RectTransform)streakBadgeGO.transform, peakScale: 1.15f, duration: 0.3f);
 
+        roundActive = false;
         var record = new BaccaratRoundRecord(roundIndex, currentRound.Player.Point, currentRound.Banker.Point,
             currentRound.Outcome, totalStaked, totalReturned, bankroll.Balance);
         onRoundResolved?.Invoke(record);
@@ -508,32 +611,74 @@ public class BaccaratBettingUIController : MonoBehaviour
             if (roundIndex == t && roundMilestonesFired.Add(t))
                 milestoneToast?.Show($"{t} Hands This Session", UIFactory.Accent, fontSize: 26);
 
-        roundActive = false;
-        RefreshBetDisplay(); // bet spots reappear right away; the finished hand stays up until the next deal
         RefreshActionButtons();
+        // The paid hand's chips and results stay a moment to read, then the boxes clear for the next bet;
+        // the cards stay up until the next deal.
+        clearResultRoutine = StartCoroutine(ClearResultAfterDelay());
     }
 
-    static string DescribeOutcome(BaccaratOutcome outcome) => outcome switch
+    IEnumerator ClearResultAfterDelay()
     {
-        BaccaratOutcome.PlayerWin => "Player wins",
-        BaccaratOutcome.BankerWin => "Banker wins",
-        BaccaratOutcome.Tie => "Tie!",
-        _ => ""
-    };
+        yield return new WaitForSeconds(2.2f);
+        clearResultRoutine = null;
+        ClearLastResult();
+    }
+
+    // Takes the finished hand's chips and result labels off the boxes (safe to call any time)
+    void ClearLastResult()
+    {
+        if (clearResultRoutine != null) { StopCoroutine(clearResultRoutine); clearResultRoutine = null; }
+        if (roundActive) return;
+        foreach (var t in spots.Keys.ToList()) roundBets[t] = 0;
+        foreach (var spot in spots.Values) spot.ResultText.text = "";
+        RefreshBetDisplay();
+    }
+
+    static string DescribeOutcome(BaccaratRound round)
+    {
+        string how = round.Player.IsNatural || round.Banker.IsNatural ? " (natural)" : "";
+        return round.Outcome switch
+        {
+            BaccaratOutcome.PlayerWin => $"Player wins {round.Player.Point} to {round.Banker.Point}{how}",
+            BaccaratOutcome.BankerWin => $"Banker wins {round.Banker.Point} to {round.Player.Point}{how}",
+            _ => $"Tie at {round.Player.Point}{how}",
+        };
+    }
+
+    // ---- Leaving the table ----
+
+    public long OnTableTotal() => roundActive ? 0 : pendingBets.Values.Sum();
+
+    // Leaving the table: chips not yet dealt go back to the wallet; a hand mid-reveal is already decided
+    // (Deal() resolves instantly), so it's paid out. Pure bankroll math — safe from OnDestroy / OnApplicationQuit
+    // and safe to call twice.
+    public void RefundTableBets()
+    {
+        if (roundActive && currentRound != null)
+        {
+            bankroll.Deposit(RoundReturn());
+            foreach (var t in spots.Keys.ToList()) roundBets[t] = 0;
+            roundActive = false;
+        }
+        long pending = pendingBets.Values.Sum();
+        if (pending > 0) bankroll.Deposit(pending);
+        foreach (var t in spots.Keys.ToList()) pendingBets[t] = 0;
+    }
 
     // ---- Display refresh ----
 
     void RefreshBetDisplay()
     {
-        bool showSpots = !roundActive;
         foreach (var kv in spots)
         {
-            kv.Value.Root.SetActive(showSpots);
-            long amount = pendingBets[kv.Key];
-            kv.Value.AmountText.text = amount > 0 ? UIFactory.FormatMoney(amount) : kv.Key.ToString().ToUpperInvariant();
-            kv.Value.AmountText.color = amount > 0 ? UIFactory.TextLight : UIFactory.TextDim;
-            kv.Value.PayoutText.gameObject.SetActive(amount <= 0);
+            // While a hand is out (and briefly after it pays), the boxes show what rode on it
+            long shown = roundBets.Values.Sum() > 0 && pendingBets.Values.Sum() == 0 ? roundBets[kv.Key] : pendingBets[kv.Key];
+            kv.Value.AmountText.text = shown > 0 ? UIFactory.FormatMoney(shown) : "";
+            RebuildChips(kv.Value, shown);
+            if (!roundActive && kv.Value.ResultText.text == "") kv.Value.FillImg.color = new Color(0f, 0f, 0f, shown > 0 ? 0.32f : 0.22f);
         }
+        long pending = pendingBets.Values.Sum();
+        hintText.text = roundActive ? "" : pending > 0 ? "Click DEAL when you're ready" : "Pick a chip, then click PLAYER, BANKER or TIE";
     }
 
     void RefreshActionButtons()
@@ -550,8 +695,11 @@ public class BaccaratBettingUIController : MonoBehaviour
 
     public void SetRoundIndex(int index) => roundIndex = index;
 
+    // Used by the HUD's RESET button — the bankroll is reset right before this, so chips on the felt just vanish
     public void ResetRound()
     {
+        StopAllCoroutines();
+        clearResultRoutine = null;
         currentRound = null;
         roundActive = false;
         winStreak = 0;
@@ -560,8 +708,8 @@ public class BaccaratBettingUIController : MonoBehaviour
         roundMilestonesFired.Clear();
         streakBadgeGO.SetActive(false);
         undoStack.Clear();
-        foreach (var t in spots.Keys.ToList()) { pendingBets[t] = 0; lastBets[t] = 0; }
-        foreach (var spot in spots.Values) ClearBetChipVisuals(spot);
+        foreach (var t in spots.Keys.ToList()) { pendingBets[t] = 0; lastBets[t] = 0; roundBets[t] = 0; }
+        foreach (var spot in spots.Values) spot.ResultText.text = "";
         playerHandUI.Clear();
         bankerHandUI.Clear();
         statusText.color = UIFactory.Accent;

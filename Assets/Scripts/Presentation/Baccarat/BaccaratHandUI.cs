@@ -10,8 +10,8 @@ using UnityEngine.UI;
 // decisions mid-hand.
 public class BaccaratHandUI
 {
-    const float CardSpacing = 72f;
-    static readonly Vector2 CardSize = new Vector2(64f, 90f);
+    float cardSpacing = 72f;
+    Vector2 cardSize = new Vector2(64f, 90f);
     static readonly Color NaturalGold = new Color(0.85f, 0.68f, 0.21f);
 
     RectTransform root;
@@ -24,18 +24,22 @@ public class BaccaratHandUI
 
     public RectTransform Root => root;
 
-    public void Build(Transform canvas, Vector2 anchoredPos)
+    // spacing must stay wider than the card, or the cards overlap
+    public void Build(Transform canvas, Vector2 anchoredPos, Vector2 cardSize, float spacing)
     {
+        this.cardSize = cardSize;
+        cardSpacing = spacing;
+        float half = cardSize.y / 2f;
         var rootGO = new GameObject("BaccaratHandUI");
         rootGO.transform.SetParent(canvas, false);
         root = rootGO.AddComponent<RectTransform>();
-        root.sizeDelta = new Vector2(320, 140);
+        root.sizeDelta = new Vector2(320, cardSize.y + 50f);
         root.anchoredPosition = anchoredPos;
 
-        totalBadgeBg = UIFactory.MakePanel(root, "TotalBadgeBg", new Vector2(0, -70), new Vector2(90, 28), UIFactory.PanelDarker, shadow: false);
+        totalBadgeBg = UIFactory.MakePanel(root, "TotalBadgeBg", new Vector2(0, -half - 20f), new Vector2(90, 28), UIFactory.PanelDarker, shadow: false);
         UIFactory.AddSharpFrame(totalBadgeBg, UIFactory.AccentDim, square: true);
         totalBadgeImg = totalBadgeBg.GetComponent<Image>();
-        totalText = UIFactory.MakeText(root, "TotalText", new Vector2(0, -70), 15,
+        totalText = UIFactory.MakeText(root, "TotalText", new Vector2(0, -half - 20f), 17,
             sizeDelta: new Vector2(80, 24), color: UIFactory.TextLight, style: FontStyle.Bold);
         totalText.text = "";
     }
@@ -53,16 +57,18 @@ public class BaccaratHandUI
         int count = Mathf.Min(hand.Cards.Count, maxCards ?? hand.Cards.Count);
         EnsureCardCount(count);
 
-        float totalWidth = (count - 1) * CardSpacing;
+        float totalWidth = (count - 1) * cardSpacing;
         float startX = -totalWidth / 2f;
         for (int i = 0; i < count; i++)
         {
             var cardUI = cardVisuals[i];
             cardUI.gameObject.SetActive(true);
             var cardRt = cardUI.GetComponent<RectTransform>();
-            cardRt.anchoredPosition = new Vector2(startX + i * CardSpacing, 0f);
             bool isNew = i >= lastRenderedCount;
-            cardUI.SetCard(hand.Cards[i], animatePopIn: isNew);
+            // A card still flying in would finish at its old slot — land it first, then move it
+            if (!isNew) cardRt.DOKill(true);
+            cardRt.anchoredPosition = new Vector2(startX + i * cardSpacing, 0f);
+            if (isNew) cardUI.SetCard(hand.Cards[i], animatePopIn: true);
         }
         for (int i = count; i < cardVisuals.Count; i++)
             cardVisuals[i].gameObject.SetActive(false);
@@ -84,6 +90,7 @@ public class BaccaratHandUI
         cardVisuals.Clear();
         lastRenderedCount = 0;
         totalText.text = "";
+        totalBadgeImg.color = UIFactory.PanelDarker;
 
         if (cardsToFlyOut.Count == 0)
         {
@@ -99,6 +106,10 @@ public class BaccaratHandUI
     void EnsureCardCount(int count)
     {
         while (cardVisuals.Count < count)
-            cardVisuals.Add(CardUI.Create(root, Vector2.zero, CardSize));
+        {
+            var card = CardUI.Create(root, Vector2.zero, cardSize);
+            foreach (var t in card.GetComponentsInChildren<Text>()) t.fontSize = Mathf.RoundToInt(cardSize.y * 0.24f);
+            cardVisuals.Add(card);
+        }
     }
 }

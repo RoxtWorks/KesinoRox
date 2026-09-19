@@ -9,17 +9,18 @@ using UnityEngine;
 public static class BaccaratSaveSystem
 {
     const string FileName = "baccaratsim_save.txt";
-    const int MaxSavedRecords = 500;
+    public const int MaxSavedRecords = 30;
 
     static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
 
-    public static void Save(Bankroll bankroll, int nextRoundIndex, List<BaccaratRoundRecord> records)
+    // chipsOnTable is counted into the saved balance so a crash with bets on the felt refunds them instead of losing them.
+    public static void Save(Bankroll bankroll, int nextRoundIndex, List<BaccaratRoundRecord> records, long chipsOnTable = 0)
     {
         try
         {
             var lines = new List<string>
             {
-                string.Join(",", bankroll.Balance, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
+                string.Join(",", bankroll.Balance + chipsOnTable, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
             };
             int start = Mathf.Max(0, records.Count - MaxSavedRecords);
             for (int i = start; i < records.Count; i++)
@@ -68,6 +69,7 @@ public static class BaccaratSaveSystem
                     long.Parse(f[5], CultureInfo.InvariantCulture),
                     long.Parse(f[6], CultureInfo.InvariantCulture)));
             }
+            if (records.Count > MaxSavedRecords) records.RemoveRange(0, records.Count - MaxSavedRecords);
             return true;
         }
         catch (Exception e)

@@ -1,23 +1,19 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Baccarat's equivalent of GameManager/BlackjackGameManager â€” same thin-orchestrator
+// Baccarat's equivalent of GameManager/BlackjackGameManager — same thin-orchestrator
 // composition pattern: builds the scene/UI procedurally at runtime and wires
-// Presentation controllers to Core session objects. Reuses BlackjackTableBuilder
-// unchanged for the 3D felt backdrop â€” it's already generic set-dressing with no
-// blackjack-specific coupling, so cloning it here would just be duplication.
+// Presentation controllers to Core session objects.
 public class BaccaratGameManager : MonoBehaviour
 {
     Bankroll bankroll;
     Shoe shoe;
-    BlackjackTableBuilder builder;
 
     BankrollHudUI hud;
     ChipSelectorUI chipSelector;
     BaccaratBettingUIController bettingController;
     BaccaratHistoryPanelUI historyPanel;
-    ResultsStripUI resultsStrip;
     SoundManager soundManager;
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
@@ -30,22 +26,20 @@ public class BaccaratGameManager : MonoBehaviour
     readonly List<BaccaratRoundRecord> sessionRecords = new List<BaccaratRoundRecord>();
     int nextRoundIndex;
 
-    static readonly Vector2 HistoryPos = new Vector2(800, 200);
-    static readonly Vector2 HistorySize = new Vector2(300, 560);
+    // Tall column on the right, same as the other table games
+    static readonly Vector2 HistoryPos = new Vector2(820, -28);
+    static readonly Vector2 HistorySize = new Vector2(270, 1016);
 
     void Start()
     {
         Application.runInBackground = true;
         SoundManager.ApplyPersistedMuteState();
 
-        builder = gameObject.AddComponent<BlackjackTableBuilder>();
-        builder.Build();
-
         SetupCamera();
         SetupLight();
 
         bankroll = new Bankroll(1000);
-        shoe = new Shoe(8, new SystemRandomSource()); // baccarat traditionally deals from a larger 8-deck shoe
+        shoe = new Shoe(8, new SystemRandomSource()); // Vegas baccarat deals from an 8-deck shoe
 
         SetupUI();
     }
@@ -118,17 +112,16 @@ public class BaccaratGameManager : MonoBehaviour
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
         rulesPanel.Build(canvasGO.transform, "BACCARAT RULES",
-            "Bet on which hand scores closer to 9: PLAYER, BANKER,\n" +
-            "or a TIE. Cards 2-9 are face value, 10/J/Q/K are worth 0,\n" +
-            "and Aces are worth 1. Only the last digit of the total\n" +
-            "counts (e.g. 7+8=15 counts as 5).\n\n" +
-            "PLAYER pays 1:1. BANKER pays 0.95:1 (a 5% commission\n" +
-            "applies since Banker has the statistical edge). TIE pays\n" +
-            "8:1 â€” and a Tie also pushes any Player/Banker bet back.\n\n" +
-            "A third card is drawn automatically for either hand\n" +
-            "under fixed rules â€” there are no player decisions once\n" +
-            "you hit DEAL.\n\n" +
-            "Shoe reshuffles automatically once it runs low.");
+            "Bet on which hand finishes closer to 9: PLAYER, BANKER, or a TIE.\n" +
+            "Cards 2-9 count face value, 10/J/Q/K count 0, Aces count 1.\n" +
+            "Only the last digit of the total counts (7 + 8 = 15 counts as 5).\n\n" +
+            "PLAYER pays 1 to 1. BANKER pays 1 to 1 less a 5% commission.\n" +
+            "TIE pays 8 to 1, and a tie pushes Player and Banker bets.\n\n" +
+            "A natural 8 or 9 on the first two cards ends the hand.\n" +
+            "Otherwise Player draws on 0-5 and stands on 6-7, and Banker\n" +
+            "draws by the standard house table. No decisions after DEAL.\n\n" +
+            "Eight-deck shoe. Chips leave your wallet when placed.\n" +
+            "RIGHT-CLICK a bet to take it down.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -139,9 +132,6 @@ public class BaccaratGameManager : MonoBehaviour
         juiceManager.Build(canvasGO.transform, cameraTransform, Vector3.up * 1f, keyLight);
 
         floatingText = gameObject.AddComponent<FloatingTextUI>();
-        // Was pinned at 460, almost against the HUD panel above â€” floating win/loss
-        // text landed way up at the top edge instead of near the action. Centered
-        // over the table, just above its header, instead.
         floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
@@ -154,7 +144,7 @@ public class BaccaratGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -169,13 +159,12 @@ public class BaccaratGameManager : MonoBehaviour
                 bankroll.Reset(resetAmount);
                 hud.Refresh();
                 historyPanel.Clear();
-                resultsStrip.Clear();
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -184,21 +173,19 @@ public class BaccaratGameManager : MonoBehaviour
         historyPanel = gameObject.AddComponent<BaccaratHistoryPanelUI>();
         historyPanel.Build(canvasGO.transform, HistoryPos, HistorySize);
 
-        resultsStrip = gameObject.AddComponent<ResultsStripUI>();
-        resultsStrip.Build(canvasGO.transform, new Vector2(0, -500));
-
         bettingController = gameObject.AddComponent<BaccaratBettingUIController>();
         bettingController.Build(canvasGO.transform, bankroll, chipSelector, shoe, soundManager, juiceManager,
-            floatingText, milestoneToast, record =>
-        {
-            hud.Refresh();
-            historyPanel.AddRecord(record);
-            resultsStrip.AddResult(OutcomeLabel(record.Outcome), OutcomeColor(record.Outcome));
-
-            sessionRecords.Add(record);
-            nextRoundIndex = record.RoundIndex + 1;
-            BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
-        });
+            floatingText, milestoneToast,
+            record =>
+            {
+                hud.Refresh();
+                historyPanel.AddRecord(record);
+                sessionRecords.Add(record);
+                if (sessionRecords.Count > BaccaratSaveSystem.MaxSavedRecords) sessionRecords.RemoveAt(0);
+                nextRoundIndex = record.RoundIndex + 1;
+                BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+            },
+            () => hud.Refresh());
 
         if (BaccaratSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<BaccaratRoundRecord> loadedRecords))
@@ -208,11 +195,7 @@ public class BaccaratGameManager : MonoBehaviour
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
             sessionRecords.AddRange(loadedRecords);
-            foreach (var record in loadedRecords)
-            {
-                historyPanel.AddRecord(record);
-                resultsStrip.AddResult(OutcomeLabel(record.Outcome), OutcomeColor(record.Outcome));
-            }
+            foreach (var record in loadedRecords) historyPanel.AddRecord(record);
         }
 
         soundManager.PlayMusic();
@@ -220,23 +203,15 @@ public class BaccaratGameManager : MonoBehaviour
         SceneTransition.Reveal();
     }
 
-    static string OutcomeLabel(BaccaratOutcome outcome) => outcome switch
-    {
-        BaccaratOutcome.PlayerWin => "P",
-        BaccaratOutcome.BankerWin => "B",
-        _ => "T",
-    };
+    // Leaving the table (quit or switching games): chips not yet dealt go back to the wallet;
+    // a hand mid-reveal is already decided, so it's paid out before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
 
-    static Color OutcomeColor(BaccaratOutcome outcome) => outcome switch
+    void LeaveTable()
     {
-        BaccaratOutcome.PlayerWin => UIFactory.Positive,
-        BaccaratOutcome.BankerWin => UIFactory.Negative,
-        _ => new Color(0.55f, 0.45f, 0.15f),
-    };
-
-    void OnApplicationQuit()
-    {
-        if (bankroll != null) BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        BaccaratSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
     }
 }
-
