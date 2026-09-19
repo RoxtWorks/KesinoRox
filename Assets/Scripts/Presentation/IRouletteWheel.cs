@@ -8,6 +8,10 @@ public interface IRouletteWheel
     Vector3 Center { get; }
     void PlaySpin(int winningNumber);
     void SetHighlightedNumbers(HashSet<int> numbers);
+    // The pocket the ball is next to right now, as a running index into WheelLayout.PocketOrder
+    // (fractional between pockets, never wrapping) — lets the number strip follow the ball.
+    // False when the wheel has no ball to follow.
+    bool LiveBallPocket(out float pocketIndex);
 }
 
 // The original primitive wheel + needle, kept so GameManager can switch back to it.
@@ -25,4 +29,5 @@ public class ClassicRouletteWheel : IRouletteWheel
     public Vector3 Center => builder.wheelPivot.position;
     public void PlaySpin(int winningNumber) => animator.PlaySpin(winningNumber);
     public void SetHighlightedNumbers(HashSet<int> numbers) => builder.SetHighlightedNumbers(numbers);
+    public bool LiveBallPocket(out float pocketIndex) { pocketIndex = 0f; return false; }
 }

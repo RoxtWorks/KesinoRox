@@ -114,10 +114,59 @@ public class ConveyorBeltUI : MonoBehaviour
         }
     }
 
-    public void PlaySpin(int winningNumber, Action onComplete)
+    // With a wheel that has a ball, the strip follows the ball — it always shows the pocket the
+    // ball is passing, so the two stop on the number together. Otherwise it rolls on its own.
+    public void PlaySpin(int winningNumber, Action onComplete, IRouletteWheel followWheel = null)
     {
         if (IsPlaying) return;
-        StartCoroutine(SpinRoutine(winningNumber, onComplete));
+        if (followWheel != null && followWheel.LiveBallPocket(out _))
+            StartCoroutine(FollowBallRoutine(winningNumber, onComplete, followWheel));
+        else
+            StartCoroutine(SpinRoutine(winningNumber, onComplete));
+    }
+
+    IEnumerator FollowBallRoutine(int winningNumber, Action onComplete, IRouletteWheel wheel)
+    {
+        IsPlaying = true;
+        int pocketCount = WheelLayout.PocketCount;
+        float trackHalfWidth = track.sizeDelta.x / 2f;
+        int baselineIndex = pocketCount * (Repeats / 2);
+        // Stays within two laps either side of the middle of the built strip; jumping by exactly
+        // four laps when it wraps is invisible because the sequence repeats
+        float CellX(float globalIndex) => -(globalIndex * CellPitch - trackHalfWidth + CellPitch / 2f);
+        float Wrapped(float pocket) => baselineIndex + Mathf.Repeat(pocket + pocketCount * 2f, pocketCount * 4f) - pocketCount * 2f;
+
+        int lastCell = int.MinValue;
+        float lastTickTime = -MinTickInterval;
+        float t = 0f;
+        while (t < Duration)
+        {
+            t += Time.deltaTime;
+            wheel.LiveBallPocket(out float pocket);
+            track.anchoredPosition = new Vector2(CellX(Wrapped(pocket)), 0f);
+
+            int cell = Mathf.FloorToInt(pocket + 0.5f);
+            if (cell != lastCell)
+            {
+                if (lastCell != int.MinValue && t - lastTickTime >= MinTickInterval)
+                {
+                    soundManager?.PlayTsk();
+                    lastTickTime = t;
+                }
+                lastCell = cell;
+            }
+            yield return null;
+        }
+
+        // Settle exactly on the winning cell (the ball is already resting in it)
+        wheel.LiveBallPocket(out float final);
+        int winIndex = Array.IndexOf(WheelLayout.PocketOrder, winningNumber);
+        float landed = Mathf.Round(final);
+        float offset = Mathf.Repeat(winIndex - landed, pocketCount);
+        if (offset > pocketCount / 2f) offset -= pocketCount;
+        track.anchoredPosition = new Vector2(CellX(Wrapped(landed + offset)), 0f);
+        IsPlaying = false;
+        onComplete?.Invoke();
     }
 
     IEnumerator SpinRoutine(int winningNumber, Action onComplete)

@@ -868,7 +868,7 @@ public class BettingUIController : MonoBehaviour
         spinInFlight = true;
         spinBets = bets;
         spinWinningNumber = winningNumber;
-        belt.PlaySpin(winningNumber, () => OnSpinComplete(winningNumber, bets, totalStake));
+        belt.PlaySpin(winningNumber, () => OnSpinComplete(winningNumber, bets, totalStake), wheel);
         wheel.PlaySpin(winningNumber);
     }
 

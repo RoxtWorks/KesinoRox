@@ -14,7 +14,7 @@ public class GameManager : MonoBehaviour
     RouletteTableBuilder builder;
     IRouletteWheel wheel;
 
-    // true = casino wheel with a real ball (RouletteBallWheel, Marcus's model); false = the
+    // true = casino wheel with a real ball (RouletteBallWheel, built in code); false = the
     // older primitive wheel with the result needle. Both stay in the project.
     const bool UseBallWheel = true;
 
@@ -118,7 +118,7 @@ public class GameManager : MonoBehaviour
         var keyGO = new GameObject("Key Light");
         var key = keyGO.AddComponent<Light>();
         key.type = LightType.Directional;
-        key.intensity = 1.1f;
+        key.intensity = UseBallWheel ? 0.45f : 1.1f; // the ball wheel brings its own overhead spotlight
         key.color = new Color(1f, 0.96f, 0.88f);
         key.shadows = LightShadows.Soft;
         keyGO.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
@@ -129,7 +129,7 @@ public class GameManager : MonoBehaviour
         var fillGO = new GameObject("Fill Light");
         var fill = fillGO.AddComponent<Light>();
         fill.type = LightType.Directional;
-        fill.intensity = 0.35f;
+        fill.intensity = UseBallWheel ? 0.15f : 0.35f;
         fill.color = new Color(0.55f, 0.65f, 0.85f);
         fill.shadows = LightShadows.None;
         fillGO.transform.rotation = Quaternion.Euler(35f, 150f, 0f);
