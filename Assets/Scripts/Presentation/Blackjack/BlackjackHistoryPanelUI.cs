@@ -7,11 +7,12 @@ using UnityEngine.UI;
 // instead of spin#/number/stake/+/-/balance.
 public class BlackjackHistoryPanelUI : MonoBehaviour
 {
-    static readonly float[] ColX = { 0f, 28f, 62f, 96f, 158f, 216f };
-    static readonly float[] ColW = { 28f, 34f, 34f, 62f, 58f, 69f };
-    const float ContentWidth = 285f;
-    const float RowHeight = 26f;
-    const int MaxStored = 300;
+    // Newest hand on top; fits the 254px content area of the tall right-hand column
+    static readonly float[] ColX = { 0f, 26f, 60f, 94f, 146f, 200f };
+    static readonly float[] ColW = { 26f, 34f, 34f, 52f, 54f, 54f };
+    const float ContentWidth = 254f;
+    const float RowHeight = 30f;
+    const int MaxStored = 60;
 
     Transform content;
     RectTransform contentRt;
@@ -71,6 +72,7 @@ public class BlackjackHistoryPanelUI : MonoBehaviour
 
         scrollRect.viewport = vpRt;
         scrollRect.content = contentRt;
+        Rebuild(false);
     }
 
     static Text MakeRowText(Transform row, string label, int col, Color? color = null, FontStyle style = FontStyle.Normal)
@@ -96,7 +98,7 @@ public class BlackjackHistoryPanelUI : MonoBehaviour
         Rebuild(animateNewest: true);
 
         Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
+        scrollRect.verticalNormalizedPosition = 1f;
     }
 
     public void Clear()
@@ -114,7 +116,7 @@ public class BlackjackHistoryPanelUI : MonoBehaviour
 
         for (int i = 0; i < records.Count; i++)
         {
-            var rec = records[i];
+            var rec = records[records.Count - 1 - i];
             var rowGO = new GameObject($"Row_{i}");
             rowGO.transform.SetParent(content, false);
             var rowRt = rowGO.AddComponent<RectTransform>();
@@ -137,12 +139,12 @@ public class BlackjackHistoryPanelUI : MonoBehaviour
             MakeRowText(rowGO.transform, $"{rec.RoundIndex + 1}", 0);
             MakeRowText(rowGO.transform, $"{rec.PlayerFinalTotal}", 1, likelyNatural ? playerTotalColor : (Color?)null, likelyNatural ? FontStyle.Bold : FontStyle.Normal);
             MakeRowText(rowGO.transform, $"{rec.DealerFinalTotal}", 2);
-            MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.TotalStaked), 3);
-            MakeRowText(rowGO.transform, $"{sign}{UIFactory.FormatMoney(rec.NetChange)}", 4, netColor);
-            MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.BalanceAfter), 5);
+            MakeRowText(rowGO.transform, UIFactory.FormatMoneyCompact(rec.TotalStaked), 3);
+            MakeRowText(rowGO.transform, $"{sign}{UIFactory.FormatMoneyCompact(rec.NetChange)}", 4, netColor);
+            MakeRowText(rowGO.transform, UIFactory.FormatMoneyCompact(rec.BalanceAfter), 5);
 
             rowObjects.Add(rowGO);
-            if (animateNewest && i == records.Count - 1) JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);
+            if (animateNewest && i == 0) JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);
         }
 
         if (records.Count == 0)

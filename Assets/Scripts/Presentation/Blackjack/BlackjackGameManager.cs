@@ -1,22 +1,20 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-// Blackjack's equivalent of GameManager â€” thin orchestrator, same composition
+// Blackjack's equivalent of GameManager — thin orchestrator, same composition
 // pattern: builds the scene/UI procedurally at runtime (no prefabs/serialized
 // fields) and wires Presentation controllers to Core session objects (Bankroll,
-// Shoe). Holds no game rules itself â€” see Assets/Scripts/Core for that.
+// Shoe). Holds no game rules itself — see Assets/Scripts/Core for that.
 public class BlackjackGameManager : MonoBehaviour
 {
     Bankroll bankroll;
     Shoe shoe;
-    BlackjackTableBuilder builder;
 
     BankrollHudUI hud;
     ChipSelectorUI chipSelector;
     BlackjackBettingUIController bettingController;
     BlackjackHistoryPanelUI historyPanel;
-    ResultsStripUI resultsStrip;
     SoundManager soundManager;
     JuiceManager juiceManager;
     FloatingTextUI floatingText;
@@ -29,8 +27,9 @@ public class BlackjackGameManager : MonoBehaviour
     readonly List<BlackjackRoundRecord> sessionRecords = new List<BlackjackRoundRecord>();
     int nextRoundIndex;
 
-    static readonly Vector2 HistoryPos = new Vector2(800, 200);
-    static readonly Vector2 HistorySize = new Vector2(300, 560);
+    // Tall column on the right, same as the other table games
+    static readonly Vector2 HistoryPos = new Vector2(820, -28);
+    static readonly Vector2 HistorySize = new Vector2(270, 1016);
 
     void Start()
     {
@@ -39,9 +38,6 @@ public class BlackjackGameManager : MonoBehaviour
         // which would freeze mid-animation instead of completing.
         Application.runInBackground = true;
         SoundManager.ApplyPersistedMuteState();
-
-        builder = gameObject.AddComponent<BlackjackTableBuilder>();
-        builder.Build();
 
         SetupCamera();
         SetupLight();
@@ -63,7 +59,7 @@ public class BlackjackGameManager : MonoBehaviour
         cam.backgroundColor = new Color(0.015f, 0.02f, 0.03f);
 
         // A camera created via AddComponent at runtime does NOT get an AudioListener
-        // automatically â€” same gotcha as the roulette scene.
+        // automatically — same gotcha as the roulette scene.
         camGO.AddComponent<AudioListener>();
         cameraTransform = camGO.transform;
     }
@@ -105,8 +101,6 @@ public class BlackjackGameManager : MonoBehaviour
         scaler.matchWidthOrHeight = 0.5f;
         canvasGO.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
-        // Top-right: CLOSE APP (same as roulette). Top-left: nav button back to the
-        // roulette scene â€” mirrored placement of roulette's own nav button to here.
         UIFactory.MakeButton(canvasGO.transform, "CloseAppBtn", new Vector2(880, 515), new Vector2(140, 32),
             "CLOSE APP", new Color(0.4f, 0.16f, 0.16f), () =>
             {
@@ -125,18 +119,16 @@ public class BlackjackGameManager : MonoBehaviour
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
         rulesPanel.Build(canvasGO.transform, "BLACKJACK RULES",
-            "Beat the dealer's hand without going over 21.\n\n" +
-            "Blackjack (natural 21 on your first two cards) pays 3:2.\n" +
-            "A normal win pays 1:1. A push returns your bet.\n\n" +
-            "Dealer hits on soft 17 and stands on hard 17+.\n\n" +
-            "SPLIT â€” any pair, up to 4 hands total. Split aces get\n" +
-            "exactly one more card each and can't be re-split or hit.\n" +
-            "DOUBLE â€” double your bet for exactly one more card.\n" +
-            "Double-after-split is allowed.\n" +
-            "SURRENDER â€” forfeit half your bet before hitting.\n" +
-            "INSURANCE â€” offered only when the dealer shows an Ace;\n" +
-            "pays 2:1 if the dealer has blackjack.\n\n" +
-            "Shoe reshuffles automatically once it runs low.");
+            "Beat the dealer's hand without going over 21. Six-deck shoe.\n\n" +
+            "Blackjack (natural 21 on your first two cards) pays 3 to 2.\n" +
+            "A normal win pays 1 to 1. A push returns your bet.\n\n" +
+            "Dealer hits soft 17 and stands on hard 17 or more.\n" +
+            "Dealer checks for blackjack when showing an Ace or a ten.\n\n" +
+            "SPLIT - any pair, up to 4 hands. Split Aces get one card each.\n" +
+            "DOUBLE - double your bet for exactly one more card (also after a split).\n" +
+            "SURRENDER - give up half your bet on your first two cards.\n" +
+            "INSURANCE - offered when the dealer shows an Ace; pays 2 to 1.\n\n" +
+            "Chips leave your wallet when placed. RIGHT-CLICK your bet to take it down.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -147,9 +139,6 @@ public class BlackjackGameManager : MonoBehaviour
         juiceManager.Build(canvasGO.transform, cameraTransform, Vector3.up * 1f, keyLight);
 
         floatingText = gameObject.AddComponent<FloatingTextUI>();
-        // Was pinned at 460, almost against the HUD panel above â€” floating win/loss
-        // text landed way up at the top edge instead of near the action. Centered
-        // over the table, just above its header, instead.
         floatingText.Build(canvasGO.transform, new Vector2(0, 260));
 
         milestoneToast = gameObject.AddComponent<FloatingTextUI>();
@@ -162,7 +151,7 @@ public class BlackjackGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -177,13 +166,12 @@ public class BlackjackGameManager : MonoBehaviour
                 bankroll.Reset(resetAmount);
                 hud.Refresh();
                 historyPanel.Clear();
-                resultsStrip.Clear();
                 bettingController.ResetRound();
                 soundManager.PlayReset();
                 sessionRecords.Clear();
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -192,24 +180,20 @@ public class BlackjackGameManager : MonoBehaviour
         historyPanel = gameObject.AddComponent<BlackjackHistoryPanelUI>();
         historyPanel.Build(canvasGO.transform, HistoryPos, HistorySize);
 
-        resultsStrip = gameObject.AddComponent<ResultsStripUI>();
-        resultsStrip.Build(canvasGO.transform, new Vector2(0, -500));
-
         bettingController = gameObject.AddComponent<BlackjackBettingUIController>();
         bettingController.Build(canvasGO.transform, bankroll, chipSelector, shoe, soundManager, juiceManager,
-            floatingText, milestoneToast, record =>
-        {
-            hud.Refresh();
-            historyPanel.AddRecord(record);
-            resultsStrip.AddResult(record.NetChange > 0 ? "W" : record.NetChange < 0 ? "L" : "P",
-                record.NetChange > 0 ? UIFactory.Positive : record.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
+            floatingText, milestoneToast,
+            record =>
+            {
+                hud.Refresh();
+                historyPanel.AddRecord(record);
+                sessionRecords.Add(record);
+                nextRoundIndex = record.RoundIndex + 1;
+                BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+            },
+            () => hud.Refresh());
 
-            sessionRecords.Add(record);
-            nextRoundIndex = record.RoundIndex + 1;
-            BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
-        });
-
-        // Restore last session, if a save exists â€” bankroll first, then replay every
+        // Restore last session, if a save exists — bankroll first, then replay every
         // saved round through the same AddRecord call a live round uses.
         if (BlackjackSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<BlackjackRoundRecord> loadedRecords))
@@ -219,12 +203,7 @@ public class BlackjackGameManager : MonoBehaviour
             bettingController.SetRoundIndex(loadedNextRoundIndex);
             nextRoundIndex = loadedNextRoundIndex;
             sessionRecords.AddRange(loadedRecords);
-            foreach (var record in loadedRecords)
-            {
-                historyPanel.AddRecord(record);
-                resultsStrip.AddResult(record.NetChange > 0 ? "W" : record.NetChange < 0 ? "L" : "P",
-                    record.NetChange > 0 ? UIFactory.Positive : record.NetChange < 0 ? UIFactory.Negative : UIFactory.Accent);
-            }
+            foreach (var record in loadedRecords) historyPanel.AddRecord(record);
         }
 
         soundManager.PlayMusic();
@@ -232,9 +211,15 @@ public class BlackjackGameManager : MonoBehaviour
         SceneTransition.Reveal();
     }
 
-    void OnApplicationQuit()
+    // Leaving the table (quit or switching games): a bet not yet dealt goes back to the wallet;
+    // a hand in progress stands where it is, the dealer plays out, and the result is paid before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
+
+    void LeaveTable()
     {
-        if (bankroll != null) BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        BlackjackSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
     }
 }
-

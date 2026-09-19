@@ -10,17 +10,18 @@ using UnityEngine;
 public static class BlackjackSaveSystem
 {
     const string FileName = "blackjacksim_save.txt";
-    const int MaxSavedRecords = 500;
+    public const int MaxSavedRecords = 30;
 
     static string FilePath => Path.Combine(Directory.GetParent(Application.dataPath).FullName, FileName);
 
-    public static void Save(Bankroll bankroll, int nextRoundIndex, List<BlackjackRoundRecord> records)
+    // chipsOnTable is counted into the saved balance so a crash with a bet on the felt refunds it instead of losing it.
+    public static void Save(Bankroll bankroll, int nextRoundIndex, List<BlackjackRoundRecord> records, long chipsOnTable = 0)
     {
         try
         {
             var lines = new List<string>
             {
-                string.Join(",", bankroll.Balance, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
+                string.Join(",", bankroll.Balance + chipsOnTable, bankroll.StartingBalance, bankroll.TotalFunded, nextRoundIndex)
             };
             int start = Mathf.Max(0, records.Count - MaxSavedRecords);
             for (int i = start; i < records.Count; i++)
@@ -68,6 +69,7 @@ public static class BlackjackSaveSystem
                     long.Parse(f[4], CultureInfo.InvariantCulture),
                     long.Parse(f[5], CultureInfo.InvariantCulture)));
             }
+            if (records.Count > MaxSavedRecords) records.RemoveRange(0, records.Count - MaxSavedRecords);
             return true;
         }
         catch (Exception e)

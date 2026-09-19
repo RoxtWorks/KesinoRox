@@ -13,8 +13,8 @@ using UnityEngine.UI;
 // just instantiated with `new HandUI()` and Build() creates its own root GameObject.
 public class HandUI
 {
-    const float CardSpacing = 46f;
-    static readonly Vector2 CardSize = new Vector2(64f, 90f);
+    float cardSpacing = 46f;
+    Vector2 cardSize = new Vector2(64f, 90f);
     static readonly Color HighlightBlue = new Color(0.25f, 0.55f, 1f);
     static readonly Color BustRed = new Color(0.75f, 0.15f, 0.15f);
     static readonly Color NaturalGold = new Color(0.85f, 0.68f, 0.21f);
@@ -30,27 +30,31 @@ public class HandUI
 
     public RectTransform Root => root;
 
-    public void Build(Transform canvas, Vector2 anchoredPos)
+    // cardSize / spacing default to the original compact hand; pass larger values for a roomier table
+    public void Build(Transform canvas, Vector2 anchoredPos, Vector2? cardSize = null, float spacing = 46f)
     {
         var rootGO = new GameObject("HandUI");
         rootGO.transform.SetParent(canvas, false);
         root = rootGO.AddComponent<RectTransform>();
-        root.sizeDelta = new Vector2(320, 140);
+        if (cardSize.HasValue) this.cardSize = cardSize.Value;
+        cardSpacing = spacing;
+        float half = this.cardSize.y / 2f;
+        root.sizeDelta = new Vector2(320, this.cardSize.y + 50f);
         root.anchoredPosition = anchoredPos;
 
-        playingLabel = UIFactory.MakeText(root, "PlayingLabel", new Vector2(0, 55), 12,
+        playingLabel = UIFactory.MakeText(root, "PlayingLabel", new Vector2(0, half + 12f), 14,
             sizeDelta: new Vector2(160, 20), color: HighlightBlue, style: FontStyle.Bold);
         playingLabel.text = "▶ PLAYING";
         playingLabel.gameObject.SetActive(false);
 
-        totalBadgeBg = UIFactory.MakePanel(root, "TotalBadgeBg", new Vector2(0, -70), new Vector2(110, 28), UIFactory.PanelDarker, shadow: false);
+        totalBadgeBg = UIFactory.MakePanel(root, "TotalBadgeBg", new Vector2(0, -half - 20f), new Vector2(110, 28), UIFactory.PanelDarker, shadow: false);
         UIFactory.AddSharpFrame(totalBadgeBg, UIFactory.AccentDim, square: true);
         totalBadgeImg = totalBadgeBg.GetComponent<Image>();
-        totalText = UIFactory.MakeText(root, "TotalText", new Vector2(0, -70), 15,
+        totalText = UIFactory.MakeText(root, "TotalText", new Vector2(0, -half - 20f), 17,
             sizeDelta: new Vector2(100, 24), color: UIFactory.TextLight, style: FontStyle.Bold);
         totalText.text = "";
 
-        doubledTag = UIFactory.MakeText(root, "DoubledTag", new Vector2(65, -70), 12,
+        doubledTag = UIFactory.MakeText(root, "DoubledTag", new Vector2(70, -half - 20f), 14,
             sizeDelta: new Vector2(40, 22), color: UIFactory.Accent, style: FontStyle.Bold);
         doubledTag.text = "2×";
         doubledTag.gameObject.SetActive(false);
@@ -70,16 +74,18 @@ public class HandUI
         int count = Mathf.Min(hand.Cards.Count, maxCards ?? hand.Cards.Count);
         EnsureCardCount(count);
 
-        float totalWidth = (count - 1) * CardSpacing;
+        float totalWidth = (count - 1) * cardSpacing;
         float startX = -totalWidth / 2f;
         for (int i = 0; i < count; i++)
         {
             var cardUI = cardVisuals[i];
             cardUI.gameObject.SetActive(true);
             var cardRt = cardUI.GetComponent<RectTransform>();
-            cardRt.anchoredPosition = new Vector2(startX + i * CardSpacing, 0f);
-
             bool isNew = i >= lastRenderedCount;
+            // A card still flying in (two quick hits) would finish at its old slot — land it first, then move it
+            if (!isNew) cardRt.DOKill(true);
+            cardRt.anchoredPosition = new Vector2(startX + i * cardSpacing, 0f);
+
             if (hideHoleCard && i == 1)
                 cardUI.SetFaceDown(animatePopIn: isNew);
             else
@@ -132,6 +138,10 @@ public class HandUI
     void EnsureCardCount(int count)
     {
         while (cardVisuals.Count < count)
-            cardVisuals.Add(CardUI.Create(root, Vector2.zero, CardSize));
+        {
+            var card = CardUI.Create(root, Vector2.zero, cardSize);
+            foreach (var t in card.GetComponentsInChildren<Text>()) t.fontSize = Mathf.RoundToInt(cardSize.y * 0.24f); // 22 at the default 90px
+            cardVisuals.Add(card);
+        }
     }
 }
