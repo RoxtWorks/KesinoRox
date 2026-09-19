@@ -115,18 +115,37 @@ public class NormalCrapsGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "STANDARD CRAPS RULES",
-            "COME-OUT ROLL: 7 or 11 = natural (Pass wins), 2/3/12 = craps (Pass loses).\n" +
-            "Any other total sets the POINT. SEVEN OUT ends the shooter's turn.\n\n" +
-            "PASS / DON'T PASS / COME / DON'T COME - the shooter's line bets, 1:1, with odds.\n" +
-            "PLACE - number before a 7: 4/10 pay 9:5, 5/9 pay 7:5, 6/8 pay 7:6.\n" +
-            "LAY - 7 before the number, true odds less 5% commission on the win.\n" +
-            "HARDWAYS - Hard 4/10 pay 7:1, Hard 6/8 pay 9:1.\n" +
-            "BETS ON/OFF covers Place, Lay and Hardways; the dealer asks at each point change.\n\n" +
-            "ONE-ROLL: Field (2 pays 2:1, 12 pays 3:1), Any Craps 7:1, Any Seven 4:1,\n" +
-            "Eleven 15:1, Horn, C&E (craps 3:1, eleven 7:1).\n" +
-            "LUCKY ROLLER: bet before a run starts; any 7 loses. Small/Tall 30:1, All 155:1.\n\n" +
-            "RIGHT-CLICK a bet to take it down (Pass Line locks once the point is set).");
+        rulesPanel.Build(canvasGO.transform, "CRAPS", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Bet the PASS LINE, then ROLL.")
+            .Pay("Come-out 7 or 11", "Pass wins")
+            .Pay("Come-out 2, 3 or 12", "Pass loses")
+            .Pay("Any other number", "becomes the POINT")
+            .Text("Roll the point again before a 7 and Pass wins. A 7 first is SEVEN OUT — the turn ends.")
+            .Heading("GOOD TO KNOW")
+            .Pay("Don't Pass / Don't Come", "the opposite of Pass / Come")
+            .Pay("Odds", "extra bet behind the line at true odds")
+            .Pay("Bets ON / OFF", "Place, Lay and Hardways work or rest")
+            .Pay("Lucky Roller", "hit every number on its side before a 7")
+            .Note("RIGHT-CLICK a bet to take it down. The Pass Line locks once the point is set.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Pass / Come", "1 to 1")
+            .Pay("Don't Pass / Don't Come", "1 to 1, 12 pushes")
+            .Pay("Odds 4/10 · 5/9 · 6/8", "2:1 · 3:2 · 6:5")
+            .Pay("Place 4/10 · 5/9 · 6/8", "9:5 · 7:5 · 7:6")
+            .Pay("Lay", "true odds less 5%")
+            .Pay("Hard 4 / Hard 10", "7 to 1")
+            .Pay("Hard 6 / Hard 8", "9 to 1")
+            .Pay("Field 3, 4, 9, 10, 11", "1 to 1")
+            .Pay("Field 2 / 12", "2 to 1 / 3 to 1")
+            .Pay("Any Craps", "7 to 1")
+            .Pay("Seven", "4 to 1")
+            .Pay("Eleven", "15 to 1")
+            .Pay("Horn 2/12 · 3/11", "30:1 · 15:1")
+            .Pay("C & E craps · eleven", "3:1 · 7:1")
+            .Pay("Lucky Roller Lows / Highs", "30 to 1")
+            .Pay("Lucky Roller All", "155 to 1"));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

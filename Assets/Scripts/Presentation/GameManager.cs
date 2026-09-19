@@ -179,19 +179,28 @@ public class GameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "ROULETTE RULES",
-            "Bet on the felt, then hit SPIN.\n\n" +
-            "STRAIGHT UP (single number) — pays 35:1\n" +
-            "SPLIT (2 adjacent numbers) — pays 17:1\n" +
-            "STREET (3 numbers, one row) — pays 11:1\n" +
-            "CORNER (4 numbers) — pays 8:1\n" +
-            "LINE (6 numbers, two rows) — pays 5:1\n" +
-            "DOZEN / COLUMN (12 numbers) — pays 2:1\n" +
-            "RED/BLACK, ODD/EVEN, 1-18/19-36 — pays 1:1\n\n" +
-            "Single-zero European wheel. 0 is green and loses every outside bet.\n\n" +
-            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.\n" +
-            "UNDO reverses your last bet action. REPEAT BET places your previous\n" +
-            "bet again. DOUBLE ALL doubles every bet on the felt at once.");
+        rulesPanel.Build(canvasGO.transform, "ROULETTE", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Pick a chip, click the felt to bet, then SPIN. The ball lands on one number; every bet covering it wins.")
+            .Text("Single-zero European wheel. 0 is green and loses every outside bet.")
+            .Heading("WHERE TO CLICK")
+            .Pay("A number", "straight up")
+            .Pay("Line between 2 numbers", "split")
+            .Pay("Bar under a column", "street (3 numbers)")
+            .Pay("Dot where 4 numbers meet", "corner")
+            .Pay("Dot between two bars", "six line")
+            .Note("Hover a line or dot to see its bet. RIGHT-CLICK a bet to take it down. DOUBLE ALL doubles every bet on the felt.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Straight up (1 number)", "35 to 1")
+            .Pay("Split (2)", "17 to 1")
+            .Pay("Street (3)", "11 to 1")
+            .Pay("Corner (4)", "8 to 1")
+            .Pay("Six line (6)", "5 to 1")
+            .Pay("Dozen / Column (12)", "2 to 1")
+            .Pay("Red / Black", "1 to 1")
+            .Pay("Odd / Even", "1 to 1")
+            .Pay("1-18 / 19-36", "1 to 1"));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

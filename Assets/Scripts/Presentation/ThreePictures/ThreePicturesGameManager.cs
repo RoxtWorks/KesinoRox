@@ -108,19 +108,23 @@ public class ThreePicturesGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "THREE PICTURES RULES",
-            "Three Pictures - Malaysian no-commission rules, one deck.\n\n" +
-            "Bet on 1 to 5 hands. Every hand and the dealer get 3 cards.\n" +
-            "Each of your hands plays against the dealer's hand.\n\n" +
-            "POINTS: 10, J, Q, K count 0, Ace counts 1, others face value.\n" +
-            "Add the cards and keep the last digit (9 is the best point).\n\n" +
-            "RANKING:\n" +
-            "  1. Three pictures (any J, Q, K) beats everything.\n" +
-            "  2. Otherwise the higher point wins.\n" +
-            "  3. Same point: more picture cards wins (Q-Q-9 beats J-10-9).\n" +
-            "  4. Same point and same pictures: push.\n\n" +
-            "PAYOUTS: win pays 1 to 1, a win with 6 points pays 1 to 2, a tie is a push.\n\n" +
-            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.");
+        rulesPanel.Build(canvasGO.transform, "THREE PICTURES", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Bet on 1 to 5 hands, then DEAL. Every hand and the dealer get 3 cards; each hand plays the dealer.")
+            .Text("Points: Ace = 1, 2-9 face value, 10/J/Q/K = 0.")
+            .Text("Add them up and keep the last digit — 9 is best.")
+            .Heading("HAND RANKING (high to low)")
+            .Pay("Three pictures", "any 3 of J/Q/K")
+            .Pay("Higher point", "9 beats 8")
+            .Pay("Same point", "more pictures wins")
+            .Pay("Same point & pictures", "push")
+            .Note("Q-Q-9 beats J-10-9 (a 10 is not a picture). One deck, shuffled every round. RIGHT-CLICK a bet to take it down.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Win", "1 to 1")
+            .Pay("Win with 6 points", "1 to 2")
+            .Pay("Tie", "push")
+            .Note("No commission, no dealer bets."));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

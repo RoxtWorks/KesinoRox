@@ -108,18 +108,36 @@ public class SicBoGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "SIC BO RULES",
-            "Sic Bo - 3 dice, Macau pay table. Every bet is one roll.\n" +
-            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.\n\n" +
-            "BIG 11-17 / SMALL 4-10 / ODD / EVEN - 1 wins 1. All lose on any triple.\n" +
-            "TOTALS - 4/17 wins 50, 5/16 wins 30, 6/15 wins 18, 7/14 wins 12, 8/13 wins 8, 9-12 wins 6.\n" +
-            "SINGLE - a number: 1 wins 1 on one die, 2 on two dice, 12 on three dice.\n" +
-            "DOUBLE - a number on at least 2 dice. 1 wins 8.\n" +
-            "COMBO - two different numbers both showing. 1 wins 5.\n" +
-            "TRIPLE - one exact three of a kind. 1 wins 150.  ANY TRIPLE - 1 wins 24.\n" +
-            "ORANGE GRID - pair + single (e.g. 4-4-1). 1 wins 50.\n" +
-            "BLUE GRID - three different numbers (e.g. 1-2-6). 1 wins 30.\n" +
-            "FOUR NUMBERS - three different numbers from the four show. 1 wins 7.");
+        rulesPanel.Build(canvasGO.transform, "SIC BO", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Place chips on any bets, then ROLL. Three dice are shaken; every bet is settled on that one roll.")
+            .Text("Big, Small, Odd and Even all lose on any triple.")
+            .Heading("SPECIAL BETS")
+            .Pay("Single", "your number on 1, 2 or 3 dice")
+            .Pay("Double", "your number on 2+ dice")
+            .Pay("Combo", "both numbers show")
+            .Pay("Orange grid", "pair + single, e.g. 4-4-1")
+            .Pay("Blue grid", "3 different, e.g. 1-2-6")
+            .Pay("Four numbers", "3 different from the 4")
+            .Note("Macau pay table. RIGHT-CLICK a bet to take it down.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Big 11-17 / Small 4-10", "1 to 1")
+            .Pay("Odd / Even", "1 to 1")
+            .Pay("Total 4 or 17", "50 to 1")
+            .Pay("Total 5 or 16", "30 to 1")
+            .Pay("Total 6 or 15", "18 to 1")
+            .Pay("Total 7 or 14", "12 to 1")
+            .Pay("Total 8 or 13", "8 to 1")
+            .Pay("Total 9 to 12", "6 to 1")
+            .Pay("Single (1 / 2 / 3 dice)", "1 / 2 / 12 to 1")
+            .Pay("Double", "8 to 1")
+            .Pay("Combo", "5 to 1")
+            .Pay("Specific triple", "150 to 1")
+            .Pay("Any triple", "24 to 1")
+            .Pay("Orange grid", "50 to 1")
+            .Pay("Blue grid", "30 to 1")
+            .Pay("Four numbers", "7 to 1"));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

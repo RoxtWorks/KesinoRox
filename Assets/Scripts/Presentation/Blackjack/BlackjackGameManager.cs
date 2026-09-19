@@ -118,17 +118,24 @@ public class BlackjackGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "BLACKJACK RULES",
-            "Beat the dealer's hand without going over 21. Six-deck shoe.\n\n" +
-            "Blackjack (natural 21 on your first two cards) pays 3 to 2.\n" +
-            "A normal win pays 1 to 1. A push returns your bet.\n\n" +
-            "Dealer hits soft 17 and stands on hard 17 or more.\n" +
-            "Dealer checks for blackjack when showing an Ace or a ten.\n\n" +
-            "SPLIT - any pair, up to 4 hands. Split Aces get one card each.\n" +
-            "DOUBLE - double your bet for exactly one more card (also after a split).\n" +
-            "SURRENDER - give up half your bet on your first two cards.\n" +
-            "INSURANCE - offered when the dealer shows an Ace; pays 2 to 1.\n\n" +
-            "Chips leave your wallet when placed. RIGHT-CLICK your bet to take it down.");
+        rulesPanel.Build(canvasGO.transform, "BLACKJACK", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Place your bet, then DEAL. Get closer to 21 than the dealer without going over.")
+            .Text("Card values: 2-10 face value, J/Q/K = 10, Ace = 1 or 11.")
+            .Text("Dealer hits soft 17, stands on hard 17+, and checks for blackjack with an Ace or ten up.")
+            .Heading("YOUR MOVES")
+            .Pay("Hit", "take a card")
+            .Pay("Stand", "keep your hand")
+            .Pay("Double", "double the bet, one more card")
+            .Pay("Split", "pairs, up to 4 hands")
+            .Pay("Surrender", "give up half, first 2 cards")
+            .Note("Split Aces get one card each. Six-deck shoe. RIGHT-CLICK your bet to take it down.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Blackjack", "3 to 2")
+            .Pay("Win", "1 to 1")
+            .Pay("Push", "bet returned")
+            .Pay("Insurance (dealer Ace)", "2 to 1"));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

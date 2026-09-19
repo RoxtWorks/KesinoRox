@@ -108,20 +108,35 @@ public class ThreeCardPokerGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "THREE CARD POKER RULES",
-            "Three Card Poker - Las Vegas rules, one deck shuffled every hand.\n\n" +
-            "Bet the ANTE (and PAIR PLUS if you like), then DEAL. After seeing your cards:\n" +
-            "  PLAY - add a bet equal to the Ante.   FOLD - lose the Ante.\n\n" +
-            "The dealer needs QUEEN HIGH or better to qualify.\n" +
-            "  Doesn't qualify: Ante pays 1 to 1, Play is a push.\n" +
-            "  Qualifies: higher hand wins Ante and Play 1 to 1; a tie pushes both.\n\n" +
-            "ANTE BONUS (when you PLAY, whatever the dealer has):\n" +
-            "  Straight 1 to 1   Three of a kind 4 to 1   Straight flush 5 to 1\n\n" +
-            "PAIR PLUS (paid on your cards, even if you fold):\n" +
-            "  Pair 1   Flush 4   Straight 5   Three of a kind 25   Straight flush 40\n\n" +
-            "RANKING: straight flush > three of a kind > straight > flush > pair > high card.\n" +
-            "A-K-Q is the highest straight, A-2-3 the lowest. Ties compare all three cards.\n\n" +
-            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.");
+        rulesPanel.Build(canvasGO.transform, "THREE CARD POKER", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Bet the ANTE (PAIR PLUS optional), then DEAL. Look at your 3 cards:")
+            .Pay("Play", "add a bet equal to the Ante")
+            .Pay("Fold", "lose the Ante")
+            .Text("Dealer needs QUEEN HIGH to qualify. If not, Ante pays 1 to 1 and Play pushes. If so, the higher hand wins.")
+            .Heading("HAND RANKING (high to low)")
+            .Pay("Straight flush", "Q-K-A same suit")
+            .Pay("Three of a kind", "7-7-7")
+            .Pay("Straight", "4-5-6")
+            .Pay("Flush", "3 of one suit")
+            .Pay("Pair", "9-9-2")
+            .Pay("High card", "")
+            .Note("A-K-Q is the highest straight, A-2-3 the lowest. One deck, shuffled every hand. RIGHT-CLICK a bet to take it down.")
+            .Payouts()
+            .Heading("ANTE & PLAY")
+            .Pay("Beat the dealer", "1 to 1 each")
+            .Pay("Dealer doesn't qualify", "Ante 1 to 1, Play push")
+            .Pay("Tie", "push")
+            .Heading("ANTE BONUS (when you play)")
+            .Pay("Straight flush", "5 to 1")
+            .Pay("Three of a kind", "4 to 1")
+            .Pay("Straight", "1 to 1")
+            .Heading("PAIR PLUS (even if you fold)")
+            .Pay("Straight flush", "40 to 1")
+            .Pay("Three of a kind", "25 to 1")
+            .Pay("Straight", "5 to 1")
+            .Pay("Flush", "4 to 1")
+            .Pay("Pair", "1 to 1"));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 

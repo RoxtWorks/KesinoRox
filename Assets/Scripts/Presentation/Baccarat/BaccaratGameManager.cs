@@ -111,17 +111,28 @@ public class BaccaratGameManager : MonoBehaviour
             "MENU", UIFactory.PanelDarker, () => switcherPanel.Toggle(), 13, pixelFont: true);
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
-        rulesPanel.Build(canvasGO.transform, "BACCARAT RULES",
-            "Bet on which hand finishes closer to 9: PLAYER, BANKER, or a TIE.\n" +
-            "Cards 2-9 count face value, 10/J/Q/K count 0, Aces count 1.\n" +
-            "Only the last digit of the total counts (7 + 8 = 15 counts as 5).\n\n" +
-            "PLAYER pays 1 to 1. BANKER pays 1 to 1 less a 5% commission.\n" +
-            "TIE pays 8 to 1, and a tie pushes Player and Banker bets.\n\n" +
-            "A natural 8 or 9 on the first two cards ends the hand.\n" +
-            "Otherwise Player draws on 0-5 and stands on 6-7, and Banker\n" +
-            "draws by the standard house table. No decisions after DEAL.\n\n" +
-            "Eight-deck shoe. Chips leave your wallet when placed.\n" +
-            "RIGHT-CLICK a bet to take it down.");
+        rulesPanel.Build(canvasGO.transform, "BACCARAT", new RulesContent()
+            .Heading("HOW TO PLAY")
+            .Text("Bet on PLAYER, BANKER or TIE, then DEAL. The hand closer to 9 wins. No decisions after DEAL.")
+            .Text("Card values: Ace = 1, 2-9 face value, 10/J/Q/K = 0.")
+            .Text("Only the last digit counts: 7 + 8 = 15 counts as 5.")
+            .Text("A natural 8 or 9 on the first two cards ends the hand.")
+            .Heading("THIRD CARD")
+            .Pay("Player 0-5", "draws")
+            .Pay("Player 6-7", "stands")
+            .Pay("Banker 0-2", "draws")
+            .Pay("Banker 3", "draws unless Player's 3rd is 8")
+            .Pay("Banker 4", "draws if Player's 3rd is 2-7")
+            .Pay("Banker 5", "draws if Player's 3rd is 4-7")
+            .Pay("Banker 6", "draws if Player's 3rd is 6-7")
+            .Pay("Banker 7", "stands")
+            .Note("If Player stands, Banker draws on 0-5. Eight-deck shoe. RIGHT-CLICK a bet to take it down.")
+            .Payouts()
+            .Heading("PAYOUTS")
+            .Pay("Player", "1 to 1")
+            .Pay("Banker", "1 to 1 less 5%")
+            .Pay("Tie", "8 to 1")
+            .Note("On a tie, Player and Banker bets push."));
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
