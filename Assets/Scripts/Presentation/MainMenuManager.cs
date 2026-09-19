@@ -54,6 +54,7 @@ public class MainMenuManager : MonoBehaviour
         camGO.tag = "MainCamera";
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = BgColor;
+        AnimatedBackground.Attach(cam); // tiled pixel-art floor drifting behind everything
         camGO.AddComponent<AudioListener>();
     }
 
@@ -120,7 +121,7 @@ public class MainMenuManager : MonoBehaviour
             var pos = new Vector2(startX + col * (buttonWidth + gapX), posY);
             MakeGameButton(canvasGO.transform, $"{entry.SceneName}Btn", pos,
                 new Vector2(buttonWidth, buttonHeight),
-                entry.DisplayName, entry.Color, () => SceneTransition.Load(entry.SceneName));
+                entry.DisplayName, entry.Color, () => SceneTransition.Load(entry.SceneName), entry.SceneName);
         }
     }
 
@@ -142,7 +143,7 @@ public class MainMenuManager : MonoBehaviour
     }
 
     void MakeGameButton(Transform parent, string name, Vector2 anchoredPos, Vector2 size,
-        string label, Color color, UnityEngine.Events.UnityAction onClick)
+        string label, Color color, UnityEngine.Events.UnityAction onClick, string sceneName)
     {
         var go = new GameObject(name);
         go.transform.SetParent(parent, false);
@@ -183,5 +184,8 @@ public class MainMenuManager : MonoBehaviour
         labelRt.anchorMax = Vector2.one;
         labelRt.offsetMin = new Vector2(6, 2);
         labelRt.offsetMax = new Vector2(-6, -2);
+
+        // Picture of the game behind its name (wheel, dice, cards)
+        GameIcons.AddArt(go, sceneName);
     }
 }

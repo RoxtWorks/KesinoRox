@@ -104,6 +104,7 @@ public class GameManager : MonoBehaviour
         camGO.transform.rotation = Quaternion.Euler(UseBallWheel ? 62f : 82f, 0f, 0f);
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.015f, 0.02f, 0.03f);
+        AnimatedBackground.Attach(cam); // tiled pixel-art floor drifting behind everything
 
         // A camera created via AddComponent at runtime does NOT get an AudioListener
         // automatically — that only happens through the Editor's "Create > Camera"

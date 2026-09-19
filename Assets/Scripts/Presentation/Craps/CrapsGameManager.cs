@@ -64,6 +64,7 @@ public class CrapsGameManager : MonoBehaviour
         camGO.transform.rotation = Quaternion.Euler(82f, 0f, 0f);
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.015f, 0.02f, 0.03f);
+        AnimatedBackground.Attach(cam); // tiled pixel-art floor drifting behind everything
         camGO.AddComponent<AudioListener>();
         cameraTransform = camGO.transform;
     }

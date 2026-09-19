@@ -79,7 +79,13 @@ public class RouletteBallWheel : MonoBehaviour, IRouletteWheel
         });
         AddLathe(transform, "RimTrim", brass, 1f, new[] { new Vector2(4.075f, 0.372f), new Vector2(4.105f, 0.372f) });
         AddLathe(transform, "BowlFloor", black, 1f, new[] { new Vector2(0f, -0.45f), new Vector2(TrackInnerR + 0.01f, -0.45f) });
-        AddLathe(transform, "Felt", felt, 8f, new[] { new Vector2(4.61f, FeltY - 0.02f), new Vector2(40f, FeltY - 0.02f) });
+        // Round wheel table: felt with a padded wood edge, the shared tiled floor showing beyond it
+        AddLathe(transform, "Felt", felt, 8f, new[] { new Vector2(4.61f, FeltY - 0.02f), new Vector2(6.3f, FeltY - 0.02f) });
+        AddLathe(transform, "TableEdge", mahogany, 6f, new[]
+        {
+            new Vector2(6.3f, FeltY - 0.02f), new Vector2(6.35f, FeltY + 0.10f), new Vector2(6.55f, FeltY + 0.16f),
+            new Vector2(6.75f, FeltY + 0.10f), new Vector2(6.8f, FeltY - 0.6f),
+        }, smooth: true);
 
         // Deflector diamonds on the track, alternating along and across the ball's path
         for (int i = 0; i < 8; i++)

@@ -54,12 +54,13 @@ public class GameSwitcherPanel : MonoBehaviour
             float startX = -rowWidth / 2f + buttonWidth / 2f;
             var pos = new Vector2(startX + col * (buttonWidth + gap), startY - row * rowHeight);
             var entry = others[i];
-            UIFactory.MakeButton(panelRoot.transform, $"SwitchTo_{entry.SceneName}", pos, new Vector2(buttonWidth, 100),
+            var btn = UIFactory.MakeButton(panelRoot.transform, $"SwitchTo_{entry.SceneName}", pos, new Vector2(buttonWidth, 100),
                 entry.DisplayName, entry.Color, () =>
                 {
                     Hide();
                     SceneTransition.Load(entry.SceneName);
                 }, 20, pixelFont: true);
+            GameIcons.AddArt(btn.gameObject, entry.SceneName);
         }
 
         panelRoot.SetActive(false);
