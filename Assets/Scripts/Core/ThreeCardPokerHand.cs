@@ -12,9 +12,8 @@ public class ThreeCardPokerHand
     // Lazy-evaluated hand rank (higher int = better hand).
     public ThreeCardPokerRank Rank => Evaluate();
 
-    // High card for tiebreaks: Ace = 14, King = 13, ... Two = 2.
+    // Highest card: Ace = 14, King = 13, ... Two = 2 (used for the dealer's Queen-high qualifier).
     public int HighCard => HighestRankValue();
-    public int SecondCard => SecondHighestRankValue();
 
     ThreeCardPokerRank Evaluate()
     {
@@ -78,13 +77,7 @@ public class ThreeCardPokerHand
         return max;
     }
 
-    int SecondHighestRankValue()
-    {
-        var vals = SortedValues();
-        return vals[1]; // middle value in sorted 3-card hand
-    }
-
-    // For pair/trips tiebreak: return the rank of the pair or trips.
+    // Rank of the pair (or trips) in the hand, 0 if none.
     public int PairRank()
     {
         if ((int)Cards[0].Rank == (int)Cards[1].Rank) return (int)Cards[0].Rank;
@@ -102,6 +95,53 @@ public class ThreeCardPokerHand
             (int)Cards[1].Rank != (int)Cards[2].Rank) return (int)Cards[1].Rank;
         return (int)Cards[2].Rank;
     }
+
+    // Card values used to break ties between hands of the same rank, most significant first.
+    // Straights (and straight flushes) compare by top card, with A-2-3 the lowest (top card 3).
+    // Pairs compare pair rank then kicker; everything else compares all three cards high to low.
+    public int[] TiebreakValues()
+    {
+        int[] v = SortedValues();
+        switch (Rank)
+        {
+            case ThreeCardPokerRank.StraightFlush:
+            case ThreeCardPokerRank.Straight:
+                return new[] { IsWheel(v) ? 3 : v[2] };
+            case ThreeCardPokerRank.ThreeOfAKind:
+                return new[] { v[0] };
+            case ThreeCardPokerRank.Pair:
+                return new[] { PairRank(), KickerRank() };
+            default:
+                return new[] { v[2], v[1], v[0] };
+        }
+    }
+
+    static bool IsWheel(int[] sorted) => sorted[0] == 2 && sorted[1] == 3 && sorted[2] == 14;
+
+    // Plain-language hand name for the table, e.g. "Pair of 9s", "Jack high", "Straight, Queen high".
+    public string Describe()
+    {
+        int[] v = SortedValues();
+        switch (Rank)
+        {
+            case ThreeCardPokerRank.StraightFlush: return $"Straight flush, {RankName(IsWheel(v) ? 3 : v[2])} high";
+            case ThreeCardPokerRank.ThreeOfAKind:  return $"Three {RankPlural(v[0])}";
+            case ThreeCardPokerRank.Straight:      return $"Straight, {RankName(IsWheel(v) ? 3 : v[2])} high";
+            case ThreeCardPokerRank.Flush:         return $"Flush, {RankName(v[2])} high";
+            case ThreeCardPokerRank.Pair:          return $"Pair of {RankPlural(PairRank())}";
+            default:                               return $"{RankName(v[2])} high";
+        }
+    }
+
+    static string RankName(int value) => value switch
+    {
+        14 => "Ace", 13 => "King", 12 => "Queen", 11 => "Jack", _ => value.ToString()
+    };
+
+    static string RankPlural(int value) => value switch
+    {
+        14 => "Aces", 13 => "Kings", 12 => "Queens", 11 => "Jacks", _ => $"{value}s"
+    };
 
     // Dealer qualifies at Queen-high or better.
     public bool DealerQualifies => Rank > ThreeCardPokerRank.HighCard ||

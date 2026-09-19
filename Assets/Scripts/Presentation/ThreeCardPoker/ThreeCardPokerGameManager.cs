@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
@@ -6,7 +6,6 @@ public class ThreeCardPokerGameManager : MonoBehaviour
 {
     Bankroll bankroll;
     Shoe shoe;
-    BlackjackTableBuilder builder;
 
     BankrollHudUI hud;
     ChipSelectorUI chipSelector;
@@ -24,22 +23,20 @@ public class ThreeCardPokerGameManager : MonoBehaviour
     readonly List<ThreeCardPokerRoundRecord> sessionRecords = new List<ThreeCardPokerRoundRecord>();
     int nextRoundIndex;
 
-    static readonly Vector2 HistoryPos  = new Vector2(800, 200);
-    static readonly Vector2 HistorySize = new Vector2(300, 560);
+    // Tall column on the right, same as Sic Bo and Three Pictures
+    static readonly Vector2 HistoryPos  = new Vector2(820, -28);
+    static readonly Vector2 HistorySize = new Vector2(270, 1016);
 
     void Start()
     {
         Application.runInBackground = true;
         SoundManager.ApplyPersistedMuteState();
 
-        builder = gameObject.AddComponent<BlackjackTableBuilder>();
-        builder.Build();
-
         SetupCamera();
         SetupLight();
 
         bankroll = new Bankroll(1000);
-        shoe = new Shoe(6, new SystemRandomSource());
+        shoe = new Shoe(1, new SystemRandomSource()); // single deck, reshuffled every hand
 
         SetupUI();
     }
@@ -112,20 +109,19 @@ public class ThreeCardPokerGameManager : MonoBehaviour
 
         rulesPanel = gameObject.AddComponent<RulesPopupUI>();
         rulesPanel.Build(canvasGO.transform, "THREE CARD POKER RULES",
-            "Three Card Poker â€” player vs dealer, 3 cards each.\n\n" +
-            "ANTE â€” required to play. After seeing your cards, choose:\n" +
-            "  PLAY â€” place an equal Play bet to contest the dealer.\n" +
-            "  FOLD â€” forfeit the Ante (Pair Plus still pays if eligible).\n\n" +
-            "DEALER QUALIFIES with Queen-high or better.\n" +
-            "  If dealer does NOT qualify: Ante pays 1:1, Play is pushed.\n" +
-            "  If dealer qualifies: higher hand wins both Ante and Play (1:1).\n\n" +
-            "ANTE BONUS (regardless of dealer qualifying):\n" +
-            "  Straight â†’ 1:1    Three of a Kind â†’ 4:1    Straight Flush â†’ 5:1\n\n" +
-            "PAIR PLUS (optional side bet, independent of main hand):\n" +
-            "  Pair â†’ 1:1    Flush â†’ 3:1    Straight â†’ 6:1\n" +
-            "  Three of a Kind â†’ 30:1    Straight Flush â†’ 40:1\n\n" +
-            "HAND RANKING: Straight Flush > Three of a Kind > Straight\n" +
-            "  > Flush > Pair > High Card.");
+            "Three Card Poker - Las Vegas rules, one deck shuffled every hand.\n\n" +
+            "Bet the ANTE (and PAIR PLUS if you like), then DEAL. After seeing your cards:\n" +
+            "  PLAY - add a bet equal to the Ante.   FOLD - lose the Ante.\n\n" +
+            "The dealer needs QUEEN HIGH or better to qualify.\n" +
+            "  Doesn't qualify: Ante pays 1 to 1, Play is a push.\n" +
+            "  Qualifies: higher hand wins Ante and Play 1 to 1; a tie pushes both.\n\n" +
+            "ANTE BONUS (when you PLAY, whatever the dealer has):\n" +
+            "  Straight 1 to 1   Three of a kind 4 to 1   Straight flush 5 to 1\n\n" +
+            "PAIR PLUS (paid on your cards, even if you fold):\n" +
+            "  Pair 1   Flush 4   Straight 5   Three of a kind 25   Straight flush 40\n\n" +
+            "RANKING: straight flush > three of a kind > straight > flush > pair > high card.\n" +
+            "A-K-Q is the highest straight, A-2-3 the lowest. Ties compare all three cards.\n\n" +
+            "Chips leave your wallet when placed. RIGHT-CLICK a bet to take it down.");
         UIFactory.MakeButton(canvasGO.transform, "RulesBtn", new Vector2(-880, 470), new Vector2(180, 32),
             "HOW TO PLAY", UIFactory.PanelDarker, () => rulesPanel.Toggle(), 13, pixelFont: true);
 
@@ -148,7 +144,7 @@ public class ThreeCardPokerGameManager : MonoBehaviour
                 bankroll.AddFunds(addAmount);
                 hud.Refresh();
                 soundManager.PlayAddMoney();
-                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             },
             resetAmount =>
             {
@@ -157,7 +153,7 @@ public class ThreeCardPokerGameManager : MonoBehaviour
                     int wins = sessionRecords.Count(r => r.NetChange > 0);
                     long biggest = sessionRecords.Max(r => r.NetChange);
                     string bestPart = biggest > 0 ? $", best +{UIFactory.FormatMoney(biggest)}" : "";
-                    milestoneToast.Show($"Session: {sessionRecords.Count} rounds, {wins} wins{bestPart}", UIFactory.Accent, fontSize: 26);
+                    milestoneToast.Show($"Session: {sessionRecords.Count} hands, {wins} won{bestPart}", UIFactory.Accent, fontSize: 26);
                 }
                 bankroll.Reset(resetAmount);
                 hud.Refresh();
@@ -167,7 +163,7 @@ public class ThreeCardPokerGameManager : MonoBehaviour
                 sessionRecords.Clear();
                 nextRoundIndex = 0;
                 bettingController.SetRoundIndex(0);
-                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
             });
 
         chipSelector = gameObject.AddComponent<ChipSelectorUI>();
@@ -185,8 +181,9 @@ public class ThreeCardPokerGameManager : MonoBehaviour
                 sessionRecords.Add(record);
                 historyPanel.AddRecord(record);
                 nextRoundIndex = record.RoundIndex + 1;
-                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
-            });
+                ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
+            },
+            () => hud.Refresh());
 
         if (ThreeCardPokerSaveSystem.TryLoad(out long balance, out long startingBalance, out long totalFunded,
                 out int loadedNextRoundIndex, out List<ThreeCardPokerRoundRecord> loadedRecords))
@@ -203,9 +200,15 @@ public class ThreeCardPokerGameManager : MonoBehaviour
         SceneTransition.Reveal();
     }
 
-    void OnApplicationQuit()
+    // Leaving the table (quit or switching games): chips before the deal go back to the wallet;
+    // a hand in progress counts as a fold (Pair Plus still settled) and is paid before saving.
+    void OnApplicationQuit() => LeaveTable();
+    void OnDestroy() => LeaveTable();
+
+    void LeaveTable()
     {
-        if (bankroll != null) ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords);
+        if (bankroll == null || bettingController == null) return;
+        bettingController.RefundTableBets();
+        ThreeCardPokerSaveSystem.Save(bankroll, nextRoundIndex, sessionRecords, bettingController.OnTableTotal());
     }
 }
-

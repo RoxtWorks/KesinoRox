@@ -1,10 +1,8 @@
 using System.Collections.Generic;
 
 // One round of Three Card Poker.
-// Flow: PlaceBet (Ante required, PairPlus optional) → Deal() → if not folded,
-// player calls Play (same as Ante amount) → Resolve().
-// Folding forfeits Ante (and PairPlus if placed but it still pays if player qualifies —
-// per rules PairPlus resolves regardless of fold, so we always evaluate it).
+// Flow: PlaceBet (Ante required, PairPlus optional) → Deal() → Play() (matches the Ante) or Fold().
+// Folding forfeits the Ante; Pair Plus is settled on the player's cards either way.
 public class ThreeCardPokerRound
 {
     readonly Dictionary<ThreeCardPokerBetType, long> bets =
@@ -17,18 +15,27 @@ public class ThreeCardPokerRound
     public bool RoundOver { get; private set; }
     public bool PlayerFolded { get; private set; }
 
-    public ThreeCardPokerRound(Shoe shoe) { Shoe = shoe; }
+    readonly bool shuffleEachHand;
+
+    // shuffleEachHand: single-deck table reshuffles before every hand. Tests pass an ordered shoe and false.
+    public ThreeCardPokerRound(Shoe shoe, bool shuffleEachHand = true)
+    {
+        Shoe = shoe;
+        this.shuffleEachHand = shuffleEachHand;
+    }
 
     public long GetBet(ThreeCardPokerBetType type) =>
         bets.TryGetValue(type, out var v) ? v : 0;
     public void PlaceBet(ThreeCardPokerBetType type, long amount) =>
         bets[type] = GetBet(type) + amount;
     public void ClearBet(ThreeCardPokerBetType type) => bets[type] = 0;
+    public void ClearAllBets() => bets.Clear();
+    public long TotalOnTable() => GetBet(ThreeCardPokerBetType.Ante) + GetBet(ThreeCardPokerBetType.Play) + GetBet(ThreeCardPokerBetType.PairPlus);
 
     // Deal 3 cards to each side. Call before any Play/Fold decision.
     public void Deal()
     {
-        if (Shoe.NeedsReshuffle) Shoe.Shuffle();
+        if (shuffleEachHand || Shoe.NeedsReshuffle) Shoe.Shuffle();
 
         PlayerHand  = new ThreeCardPokerHand();
         DealerHand  = new ThreeCardPokerHand();

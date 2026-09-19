@@ -15,7 +15,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Ace), C(Rank.Two), C(Rank.King), C(Rank.Three),
             C(Rank.Queen), C(Rank.Four));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
 
@@ -33,7 +33,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Two), C(Rank.Queen), C(Rank.Three), C(Rank.Jack),
             C(Rank.Four), C(Rank.Ten));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
         var result = round.Fold();
@@ -51,7 +51,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Ace), C(Rank.Two), C(Rank.Ace, Suit.Hearts), C(Rank.Three),
             C(Rank.King), C(Rank.Four));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.PlaceBet(ThreeCardPokerBetType.PairPlus, 50);
         round.Deal();
@@ -67,7 +67,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Seven), C(Rank.Jack), C(Rank.Eight), C(Rank.Two, Suit.Hearts),
             C(Rank.Nine), C(Rank.Five, Suit.Diamonds));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
         var result = round.Play();
@@ -86,7 +86,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Ace,  Suit.Spades), C(Rank.Queen), C(Rank.King, Suit.Spades), C(Rank.Two),
             C(Rank.Queen, Suit.Spades), C(Rank.Three));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
         var result = round.Play();
@@ -103,13 +103,13 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Four, Suit.Spades), C(Rank.Queen), C(Rank.Five, Suit.Spades), C(Rank.Two),
             C(Rank.Six, Suit.Spades), C(Rank.Three));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
         var result = round.Play();
 
-        // Straight Flush → AnteBonus 5:1 = 600
-        Assert.AreEqual(600, result.AnteBonusReturn);
+        // Straight Flush → Ante Bonus 5:1 = 500 winnings (Ante stake settled separately)
+        Assert.AreEqual(500, result.AnteBonusReturn);
         Assert.AreEqual(200, result.AnteReturn);
         Assert.AreEqual(200, result.PlayReturn);
     }
@@ -121,7 +121,7 @@ public class ThreeCardPokerRoundTests
         var shoe = ShoeOf(
             C(Rank.Two), C(Rank.Ace), C(Rank.Three), C(Rank.King),
             C(Rank.Five), C(Rank.Queen));
-        var round = new ThreeCardPokerRound(shoe);
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
         round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
         round.Deal();
         var result = round.Play();
@@ -129,5 +129,23 @@ public class ThreeCardPokerRoundTests
         Assert.AreEqual(ThreeCardPokerOutcome.DealerWins, result.Outcome);
         Assert.AreEqual(0, result.AnteReturn);
         Assert.AreEqual(0, result.PlayReturn);
+    }
+
+    [Test]
+    public void Losing_Straight_Still_Gets_Ante_Bonus_Winnings_Only()
+    {
+        // Player A-2-3 straight (lowest) vs dealer 2-3-4 straight: dealer wins; Ante Bonus straight pays 1:1 on the Ante
+        var shoe = ShoeOf(
+            C(Rank.Ace), C(Rank.Two, Suit.Diamonds), C(Rank.Two, Suit.Hearts), C(Rank.Three, Suit.Spades),
+            C(Rank.Three, Suit.Spades), C(Rank.Four, Suit.Hearts));
+        var round = new ThreeCardPokerRound(shoe, shuffleEachHand: false);
+        round.PlaceBet(ThreeCardPokerBetType.Ante, 100);
+        round.Deal();
+        var result = round.Play();
+
+        Assert.AreEqual(ThreeCardPokerOutcome.DealerWins, result.Outcome);
+        Assert.AreEqual(100, result.AnteBonusReturn);
+        Assert.AreEqual(200, result.TotalStaked);
+        Assert.AreEqual(-100, result.NetChange);
     }
 }

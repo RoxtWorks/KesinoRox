@@ -36,53 +36,42 @@ public static class ThreeCardPokerResolver
         _                                     => 0
     };
 
-    // Ante Bonus: paid on player's hand regardless of dealer qualifying.
+    // Ante Bonus: paid on the player's hand regardless of the dealer (only when the player PLAYs).
+    // Returns winnings only — the Ante stake itself is settled by AntePayout, so it must not be returned twice.
     // Standard pay table: Straight Flush 5:1, Three of a Kind 4:1, Straight 1:1.
     public static long AnteBonusPayout(long anteBet, ThreeCardPokerHand player) =>
         player.Rank switch
         {
-            ThreeCardPokerRank.StraightFlush => anteBet * 6, // 5:1
-            ThreeCardPokerRank.ThreeOfAKind  => anteBet * 5, // 4:1
-            ThreeCardPokerRank.Straight      => anteBet * 2, // 1:1
+            ThreeCardPokerRank.StraightFlush => anteBet * 5, // 5:1
+            ThreeCardPokerRank.ThreeOfAKind  => anteBet * 4, // 4:1
+            ThreeCardPokerRank.Straight      => anteBet,     // 1:1
             _                                => 0
         };
 
     // Pair Plus pays on the player's own hand, no comparison with dealer.
-    // Standard pay table: Straight Flush 40:1, Three of Kind 30:1,
-    // Straight 6:1, Flush 3:1, Pair 1:1.
+    // Las Vegas pay table (most common): Straight Flush 40:1, Three of a Kind 25:1,
+    // Straight 5:1, Flush 4:1, Pair 1:1.
     public static long PairPlusPayout(long ppBet, ThreeCardPokerHand player) =>
         player.Rank switch
         {
             ThreeCardPokerRank.StraightFlush => ppBet * 41, // 40:1
-            ThreeCardPokerRank.ThreeOfAKind  => ppBet * 31, // 30:1
-            ThreeCardPokerRank.Straight      => ppBet * 7,  // 6:1
-            ThreeCardPokerRank.Flush         => ppBet * 4,  // 3:1
+            ThreeCardPokerRank.ThreeOfAKind  => ppBet * 26, // 25:1
+            ThreeCardPokerRank.Straight      => ppBet * 6,  // 5:1
+            ThreeCardPokerRank.Flush         => ppBet * 5,  // 4:1
             ThreeCardPokerRank.Pair          => ppBet * 2,  // 1:1
             _                                => 0
         };
 
-    // Returns >0 if a beats b, <0 if b beats a, 0 if equal.
+    // Returns >0 if a beats b, <0 if b beats a, 0 if equal. Same rank: compare tiebreak values in order.
     static int CompareHands(ThreeCardPokerHand a, ThreeCardPokerHand b)
     {
         int rankCmp = (int)a.Rank - (int)b.Rank;
         if (rankCmp != 0) return rankCmp;
 
-        // Same rank — compare high card / pair rank / kicker
-        return a.Rank switch
-        {
-            ThreeCardPokerRank.Pair =>
-                a.PairRank() != b.PairRank()
-                    ? a.PairRank() - b.PairRank()
-                    : a.KickerRank() - b.KickerRank(),
-
-            ThreeCardPokerRank.ThreeOfAKind =>
-                a.HighCard - b.HighCard,
-
-            _ =>
-                a.HighCard != b.HighCard ? a.HighCard - b.HighCard
-                : a.SecondCard != b.SecondCard ? a.SecondCard - b.SecondCard
-                : 0
-        };
+        int[] ta = a.TiebreakValues(), tb = b.TiebreakValues();
+        for (int i = 0; i < ta.Length; i++)
+            if (ta[i] != tb[i]) return ta[i] - tb[i];
+        return 0;
     }
 }
 

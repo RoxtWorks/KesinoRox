@@ -122,21 +122,21 @@ public class ThreeCardPokerResolverTests
     {
         var h = Hand(C(Rank.Ace, Suit.Hearts), C(Rank.Two, Suit.Hearts),
                      C(Rank.Three, Suit.Hearts));
-        Assert.AreEqual(600, ThreeCardPokerResolver.AnteBonusPayout(100, h));
+        Assert.AreEqual(500, ThreeCardPokerResolver.AnteBonusPayout(100, h));
     }
 
     [Test]
     public void AnteBonus_ThreeOfAKind_Pays_4to1()
     {
         var h = Hand(C(Rank.King), C(Rank.King, Suit.Hearts), C(Rank.King, Suit.Spades));
-        Assert.AreEqual(500, ThreeCardPokerResolver.AnteBonusPayout(100, h));
+        Assert.AreEqual(400, ThreeCardPokerResolver.AnteBonusPayout(100, h));
     }
 
     [Test]
     public void AnteBonus_Straight_Pays_1to1()
     {
         var h = Hand(C(Rank.Four), C(Rank.Five, Suit.Hearts), C(Rank.Six));
-        Assert.AreEqual(200, ThreeCardPokerResolver.AnteBonusPayout(100, h));
+        Assert.AreEqual(100, ThreeCardPokerResolver.AnteBonusPayout(100, h));
     }
 
     [Test]
@@ -166,5 +166,103 @@ public class ThreeCardPokerResolverTests
     {
         var h = Hand(C(Rank.Two), C(Rank.Seven, Suit.Hearts), C(Rank.Nine, Suit.Spades));
         Assert.AreEqual(0, ThreeCardPokerResolver.PairPlusPayout(100, h));
+    }
+
+    // ── Vegas Pair Plus table 40/25/5/4/1 ─────────────────────────────────
+    [Test]
+    public void PairPlus_ThreeOfAKind_Pays_25to1()
+    {
+        var h = Hand(C(Rank.Seven), C(Rank.Seven, Suit.Hearts), C(Rank.Seven, Suit.Spades));
+        Assert.AreEqual(2600, ThreeCardPokerResolver.PairPlusPayout(100, h));
+    }
+
+    [Test]
+    public void PairPlus_Straight_Pays_5to1()
+    {
+        var h = Hand(C(Rank.Eight), C(Rank.Nine, Suit.Hearts), C(Rank.Ten));
+        Assert.AreEqual(600, ThreeCardPokerResolver.PairPlusPayout(100, h));
+    }
+
+    [Test]
+    public void PairPlus_Flush_Pays_4to1()
+    {
+        var h = Hand(C(Rank.Two, Suit.Hearts), C(Rank.Nine, Suit.Hearts), C(Rank.King, Suit.Hearts));
+        Assert.AreEqual(500, ThreeCardPokerResolver.PairPlusPayout(100, h));
+    }
+
+    // ── Tie-breaks (qualifying dealer) ─────────────────────────────────────
+    static ThreeCardPokerOutcome Vs(ThreeCardPokerHand p, ThreeCardPokerHand d) => ThreeCardPokerResolver.Resolve(p, d);
+
+    [Test]
+    public void HighCard_Compares_Third_Card()
+    {
+        var p = Hand(C(Rank.King), C(Rank.Nine, Suit.Hearts), C(Rank.Five, Suit.Spades));
+        var d = Hand(C(Rank.King, Suit.Diamonds), C(Rank.Nine, Suit.Spades), C(Rank.Four, Suit.Hearts));
+        Assert.AreEqual(ThreeCardPokerOutcome.PlayerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Identical_Ranks_Tie()
+    {
+        var p = Hand(C(Rank.King), C(Rank.Nine, Suit.Hearts), C(Rank.Five, Suit.Spades));
+        var d = Hand(C(Rank.King, Suit.Diamonds), C(Rank.Nine, Suit.Spades), C(Rank.Five, Suit.Hearts));
+        Assert.AreEqual(ThreeCardPokerOutcome.Tie, Vs(p, d));
+    }
+
+    [Test]
+    public void Ace_Two_Three_Is_The_Lowest_Straight()
+    {
+        var p = Hand(C(Rank.Ace), C(Rank.Two, Suit.Hearts), C(Rank.Three, Suit.Spades));
+        var d = Hand(C(Rank.Two, Suit.Diamonds), C(Rank.Three, Suit.Clubs), C(Rank.Four, Suit.Hearts));
+        Assert.AreEqual(ThreeCardPokerOutcome.DealerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Ace_King_Queen_Is_The_Highest_Straight()
+    {
+        var p = Hand(C(Rank.Ace), C(Rank.King, Suit.Hearts), C(Rank.Queen, Suit.Spades));
+        var d = Hand(C(Rank.King, Suit.Diamonds), C(Rank.Queen, Suit.Clubs), C(Rank.Jack, Suit.Hearts));
+        Assert.AreEqual(ThreeCardPokerOutcome.PlayerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Ace_Two_Three_Straight_Flush_Loses_To_Two_Three_Four_Straight_Flush()
+    {
+        var p = Hand(C(Rank.Ace, Suit.Hearts), C(Rank.Two, Suit.Hearts), C(Rank.Three, Suit.Hearts));
+        var d = Hand(C(Rank.Two, Suit.Spades), C(Rank.Three, Suit.Spades), C(Rank.Four, Suit.Spades));
+        Assert.AreEqual(ThreeCardPokerOutcome.DealerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Same_Pair_Kicker_Decides()
+    {
+        var p = Hand(C(Rank.Nine), C(Rank.Nine, Suit.Hearts), C(Rank.Ace, Suit.Spades));
+        var d = Hand(C(Rank.Nine, Suit.Diamonds), C(Rank.Nine, Suit.Spades), C(Rank.King, Suit.Hearts));
+        Assert.AreEqual(ThreeCardPokerOutcome.PlayerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Flush_Compares_All_Three_Cards()
+    {
+        var p = Hand(C(Rank.King, Suit.Hearts), C(Rank.Eight, Suit.Hearts), C(Rank.Three, Suit.Hearts));
+        var d = Hand(C(Rank.King, Suit.Spades), C(Rank.Eight, Suit.Spades), C(Rank.Four, Suit.Spades));
+        Assert.AreEqual(ThreeCardPokerOutcome.DealerWins, Vs(p, d));
+    }
+
+    [Test]
+    public void Dealer_Exactly_Queen_High_Qualifies()
+    {
+        var d = Hand(C(Rank.Queen), C(Rank.Four, Suit.Hearts), C(Rank.Two, Suit.Spades));
+        Assert.IsTrue(d.DealerQualifies);
+    }
+
+    // ── Hand names ─────────────────────────────────────────────────────────
+    [Test]
+    public void Describe_Names_Hands_Plainly()
+    {
+        Assert.AreEqual("Pair of 9s", Hand(C(Rank.Nine), C(Rank.Nine, Suit.Hearts), C(Rank.Two)).Describe());
+        Assert.AreEqual("Jack high", Hand(C(Rank.Jack), C(Rank.Eight, Suit.Hearts), C(Rank.Four)).Describe());
+        Assert.AreEqual("Straight, 3 high", Hand(C(Rank.Ace), C(Rank.Two, Suit.Hearts), C(Rank.Three)).Describe());
+        Assert.AreEqual("Three Kings", Hand(C(Rank.King), C(Rank.King, Suit.Hearts), C(Rank.King, Suit.Spades)).Describe());
     }
 }
