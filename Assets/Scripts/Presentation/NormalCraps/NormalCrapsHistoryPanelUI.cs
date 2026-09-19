@@ -93,7 +93,7 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
         if (records.Count > MaxStored) records.RemoveAt(0);
         Rebuild(animateNewest: true);
         Canvas.ForceUpdateCanvases();
-        scrollRect.verticalNormalizedPosition = 0f;
+        scrollRect.verticalNormalizedPosition = 1f;
     }
 
     public void Clear()
@@ -110,7 +110,7 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
 
         for (int i = 0; i < records.Count; i++)
         {
-            var rec = records[i];
+            var rec = records[records.Count - 1 - i]; // newest on top, same as the other tables
             var rowGO = new GameObject($"Row_{i}");
             rowGO.transform.SetParent(content, false);
             var rowRt = rowGO.AddComponent<RectTransform>();
@@ -131,7 +131,7 @@ public class NormalCrapsHistoryPanelUI : MonoBehaviour
             MakeRowText(rowGO.transform, UIFactory.FormatMoney(rec.BalanceAfter), 5);
 
             rowObjects.Add(rowGO);
-            if (animateNewest && i == records.Count - 1)
+            if (animateNewest && i == 0)
                 JuiceTweens.PopIn(this, rowRt, overshoot: 1.06f, duration: 0.2f);
         }
 

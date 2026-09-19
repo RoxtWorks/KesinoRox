@@ -28,7 +28,7 @@ public static class GameCatalog
         new Entry("Baccarat",      "BACCARAT",     new Color(0.16f, 0.32f, 0.58f)),
         new Entry("CraplessCraps", "CRAPLESS",     new Color(0.62f, 0.46f, 0.1f)),
         new Entry("NormalCraps",   "CRAPS",        new Color(0.55f, 0.38f, 0.08f)),
-        new Entry("ThreePictures", "3 KINGS",      new Color(0.55f, 0.15f, 0.48f)),
+        new Entry("ThreePictures", "3 PICTURES",   new Color(0.55f, 0.15f, 0.48f)),
         new Entry("SicBo",         "SIC BO",       new Color(0.18f, 0.50f, 0.55f)),
         new Entry("ThreeCardPoker","3-CARD POKER", new Color(0.20f, 0.45f, 0.20f)),
     };
